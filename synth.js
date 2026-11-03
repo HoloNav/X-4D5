@@ -470,57 +470,63 @@ window.addEventListener("unhandledrejection", event => {
       const row=document.createElement("div");row.className="osc-row";
       row.innerHTML='<div class="osc-id">OSC '+(i+1)+'</div><div class="osc-fields"><select aria-label="Oscillator '+(i+1)+' waveform">'+waves.map(w=>'<option value="'+w[0]+'">'+w[1]+'</option>').join("")+'</select><select aria-label="Oscillator '+(i+1)+' octave"><option value="-2">-2 OCT</option><option value="-1">-1 OCT</option><option value="0" selected>0 OCT</option><option value="1">+1 OCT</option><option value="2">+2 OCT</option></select></div>';
       const selects=row.querySelectorAll("select");selects[0].value=oscSettings[i].wave;selects[1].value=oscSettings[i].oct;
-      selects[0].addEventListener("change",()=>oscSettings[i].wave=selects[0].value);
-      selects[1].addEventListener("change",()=>oscSettings[i].oct=Number(selects[1].value));
+      selects[0].addEventListener("change",()=>{oscSettings[i].wave=selects[0].value;updateLiveVoices();});
+      selects[1].addEventListener("change",()=>{oscSettings[i].oct=Number(selects[1].value);updateLiveVoices();});
       host.append(row);
       const label=document.createElement("label");label.className="control";label.innerHTML='<span>OSC '+(i+1)+' LEVEL</span><input type="range" min="0" max="0.8" step="0.01" value="'+oscSettings[i].level+'"><output></output>';
       const range=label.querySelector("input"),out=label.querySelector("output");out.textContent=Math.round(oscSettings[i].level*100)+"%";
-      range.addEventListener("input",()=>{oscSettings[i].level=Number(range.value);out.textContent=Math.round(oscSettings[i].level*100)+"%";});
+      range.addEventListener("input",()=>{oscSettings[i].level=Number(range.value);out.textContent=Math.round(oscSettings[i].level*100)+"%";updateLiveVoices();});
       mix.append(label);
     }
   }
-  const pointerNotes = new Map();
+  const pointerNotes=new Map(),computerHeld=new Map();
   function releasePointer(pointerId){
-    const note=pointerNotes.get(pointerId);
-    if(note===undefined)return;
+    const info=pointerNotes.get(pointerId);
+    if(!info)return;
     stopNote("ptr-"+pointerId);
     pointerNotes.delete(pointerId);
-    heldNotes.delete(note);
-    const key=$('.key[data-note="'+note+'"]');
+    setHeld(info.note,false);
+    const key=$('.key[data-note="'+info.base+'"]');
     if(key)key.classList.remove("active");
-    if($("arp-latch").checked)arpLatchNotes=[...new Set([...arpLatchNotes,note])];
+    if($("arp-latch").checked&&!arpLatchNotes.includes(info.note))
+      arpLatchNotes.push(info.note);
   }
   function buildKeyboard(){
     const host=$("keyboard"),start=48,count=25,black=[1,3,6,8,10];
+    const whiteCount=15; // C3–C5 inclusive: 15 whites and 10 accidentals
+    let whitesBefore=0;
     for(let n=0;n<count;n++){
-      const note=start+n,pc=note%12,octave=Math.floor(note/12)-1;
+      const base=start+n,pc=base%12,octave=Math.floor(base/12)-1;
+      const isBlack=black.includes(pc);
       const key=document.createElement("button");
       key.type="button";
-      key.className="key"+(black.includes(pc)?" black":"");
-      key.dataset.note=note;
+      key.className="key"+(isBlack?" black":"");
+      key.dataset.note=base;
       const label=noteNames[pc]+octave;
       key.textContent=label;
       key.setAttribute("aria-label",label);
       key.title=label;
-      if(black.includes(pc)){
-        const whiteBefore=n-black.filter(b=>b<pc).length;
-        key.style.left=(whiteBefore*100/15+100/30)+"%";
-      }else key.style.flex="1";
+      if(isBlack){
+        // CSS .key.black translates itself -50%, so it must be placed at
+        // the boundary between adjacent white keys. The original code
+        // counted white keys incorrectly after the first octave.
+        key.style.left=(whitesBefore/whiteCount*100)+"%";
+      }else{
+        key.style.flex="1";
+        whitesBefore++;
+      }
       key.addEventListener("pointerdown",e=>{
+        if(e.button!==0&&e.pointerType==="mouse")return;
         e.preventDefault();
         if(pointerNotes.has(e.pointerId))return;
-        if(arpTapNotes.includes(note)){
-          arpTapNotes=arpTapNotes.filter(n=>n!==note);
-          arpLatchNotes=arpLatchNotes.filter(n=>n!==note);
-          heldNotes.delete(note);
-          key.classList.remove("active");
-          if(!arpTapNotes.length&&!heldNotes.size)$("seq-position").textContent="TAP KEYS, THEN PLAY";
-          return;
-        }
-        pointerNotes.set(e.pointerId,note);
-        arpTapNotes.push(note);
+        const note=base+Number($("octave").value)*12;
+        pointerNotes.set(e.pointerId,{note,base});
+        try{key.setPointerCapture(e.pointerId)}catch(err){}
         key.classList.add("active");
-        heldNotes.set(note,true);
+        setHeld(note,true);
+        // Building a performance chord must never steal the second
+        // tap of a note. Clearing is done with the CLEAR control.
+        if(!arpTapNotes.includes(note))arpTapNotes.push(note);
         startNote(note,.85,"ptr-"+e.pointerId);
       });
       host.append(key);
@@ -528,6 +534,7 @@ window.addEventListener("unhandledrejection", event => {
   }
   window.addEventListener("pointerup",e=>releasePointer(e.pointerId));
   window.addEventListener("pointercancel",e=>releasePointer(e.pointerId));
+  window.addEventListener("blur",()=>{stopSequence();stopAll()});
 
   function applyPreset(index){
     currentPreset=(index+presets.length)%presets.length;const p=presets[currentPreset];
