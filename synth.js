@@ -138,7 +138,7 @@
     }
     $("arp-octave-wrap").style.display=$("seq-mode").value==="arp"?"flex":"none";
     $("arp-direction").disabled=$("seq-mode").value!=="arp";
-    $("seq-help").textContent=$("seq-mode").value==="arp"?"Hold a chord, then PLAY. Toggle steps for rhythmic rests.":"Hold a root note, then PLAY. 16 pitch steps form a repeating pattern.";
+    $("seq-help").textContent=$("seq-mode").value==="arp"?"Tap keys to build a chord; tap a key again to remove it. PLAY runs at double-time.":"Tap a root note, then PLAY. 16 pitch steps form a repeating pattern.";
   }
   function stopSequence(){
     if(seqTimer){clearTimeout(seqTimer);seqTimer=null;}
