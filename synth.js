@@ -10,7 +10,9 @@
     {name:"NEON STRINGS",wave:["sawtooth","sawtooth","triangle"],level:[.3,.32,.2],oct:[0,0,1],cutoff:3400,resonance:1.1,attack:.65,decay:1.2,sustain:.68,release:2.8}
   ];
   let audio = null, master = null, active = new Map(), currentPreset = 0, voices = 0;
-  let chorusDelay, chorusLfo, chorusWet, dryGain, reverbWet, reverbDry, convolver;\n  let seqTimer=null, seqStep=0, seqDirection=1, heldNotes=new Map(), arpLatchNotes=[];\n  let stepEnabled=Array(16).fill(true), stepOffsets=[0,2,4,7,9,7,4,2,0,-3,-5,-3,0,2,4,7];
+  let chorusDelay, chorusLfo, chorusWet, dryGain, reverbWet, reverbDry, convolver;
+  let seqTimer=null, seqStep=0, seqDirection=1, heldNotes=new Map(), arpLatchNotes=[];
+  let stepEnabled=Array(16).fill(true), stepOffsets=[0,2,4,7,9,7,4,2,0,-3,-5,-3,0,2,4,7];
   const oscSettings = [0,1,2].map(i => ({wave:"sawtooth",level:[.55,.28,.2][i],oct:0}));
   const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
   const keyMap = {a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:72};
@@ -158,7 +160,8 @@
     if($("seq-mode").value==="step"&&!heldNotes.size){$("seq-position").textContent="HOLD A ROOT NOTE";return;}
     seqStep=0;$("seq-play").textContent="Ⅱ RUNNING";seqTimer=true;sequenceTick();
   }
-\n  function buildOscillators(){
+
+  function buildOscillators(){
     const host=$("oscillators"),mix=$("mixer-controls");
     const waves=[["sawtooth","SAW"],["square","SQUARE"],["triangle","TRIANGLE"],["sine","SINE"]];
     for(let i=0;i<3;i++){
@@ -222,5 +225,11 @@
   document.querySelectorAll(".mode-tab").forEach(tab=>tab.addEventListener("click",()=>{document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active",t===tab));document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id===tab.dataset.target));}));
   window.addEventListener("keydown",e=>{if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||e.target.matches("input,select,textarea"))return;const note=keyMap[e.key.toLowerCase()];if(note!==undefined){const shifted=note+Number($("octave").value)*12;heldNotes.set(shifted,true);startNote(shifted,.8,"kbd-"+e.key.toLowerCase());const key=$(' .key[data-note="'+shifted+'"]'.trim());if(key)key.classList.add("active");}});
   window.addEventListener("keyup",e=>{const k="kbd-"+e.key.toLowerCase();stopNote(k);const held=keyMap[e.key.toLowerCase()];if(held!==undefined){const shifted=held+Number($("octave").value)*12;heldNotes.delete(shifted);if($("arp-latch").checked)arpLatchNotes=[...new Set([...arpLatchNotes,shifted])];}const note=keyMap[e.key.toLowerCase()];if(note!==undefined){const key=$('.key[data-note="'+(note+Number($("octave").value)*12)+'"]');if(key)key.classList.remove("active");}});
-  $("seq-mode").addEventListener("change",()=>{stopSequence();seqStep=0;renderSteps();});\n  $("seq-play").addEventListener("click",startSequence);$("seq-stop").addEventListener("click",stopSequence);\n  $("seq-all").addEventListener("click",()=>{stepEnabled.fill(true);renderSteps();});\n  $("seq-clear").addEventListener("click",()=>{stepEnabled.fill(false);arpLatchNotes=[];renderSteps();});\n  $("arp-latch").addEventListener("change",e=>{if(!e.target.checked)arpLatchNotes=[];else if(heldNotes.size)arpLatchNotes=[...heldNotes.keys()];});\n  bindRange("seq-tempo",v=>Math.round(v)+" BPM");bindRange("seq-gate",v=>Math.round(v)+"%");bindRange("seq-swing",v=>Math.round(v)+"%");\n  renderSteps();$("patch-name").textContent=presets[0].name;applyPreset(0);renderPatchList();
+  $("seq-mode").addEventListener("change",()=>{stopSequence();seqStep=0;renderSteps();});
+  $("seq-play").addEventListener("click",startSequence);$("seq-stop").addEventListener("click",stopSequence);
+  $("seq-all").addEventListener("click",()=>{stepEnabled.fill(true);renderSteps();});
+  $("seq-clear").addEventListener("click",()=>{stepEnabled.fill(false);arpLatchNotes=[];renderSteps();});
+  $("arp-latch").addEventListener("change",e=>{if(!e.target.checked)arpLatchNotes=[];else if(heldNotes.size)arpLatchNotes=[...heldNotes.keys()];});
+  bindRange("seq-tempo",v=>Math.round(v)+" BPM");bindRange("seq-gate",v=>Math.round(v)+"%");bindRange("seq-swing",v=>Math.round(v)+"%");
+  renderSteps();$("patch-name").textContent=presets[0].name;applyPreset(0);renderPatchList();
 })();
