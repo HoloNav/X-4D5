@@ -353,65 +353,114 @@ window.addEventListener("unhandledrejection", event => {
   function sequenceNotes(){
     const mode=$("seq-mode").value;
     if(mode==="step"){
-      const root=heldNotes.size?[...heldNotes.keys()].sort((a,b)=>a-b)[0]:(arpTapNotes.length?arpTapNotes[0]:60);
+      const root=heldNotes.size?[...heldNotes.keys()][0]:
+        arpTapNotes.length?arpTapNotes[0]:60;
       return [root+stepOffsets[seqStep%16]];
     }
-    const notes=arpLatchNotes.length?arpLatchNotes:(heldNotes.size?[...heldNotes.keys()].sort((a,b)=>a-b):[...arpTapNotes].sort((a,b)=>a-b));
-    if(!notes.length)return [];
-    const expanded=[];const oct=Number($("arp-octaves").value);
-    for(let o=0;o<oct;o++)notes.forEach(n=>expanded.push(n+o*12));
-    const dir=$("arp-direction").value;
-    if(dir==="down")expanded.reverse();
-    if(dir==="updown"&&expanded.length>2){const up=expanded.slice(0,-1),down=expanded.slice(1).reverse();return up.concat(down);}
-    if(dir==="random"){for(let i=expanded.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[expanded[i],expanded[j]]=[expanded[j],expanded[i]];}}
+    // Preserve insertion order for AS PLAYED; sorted pitch order for UP/DOWN.
+    const base=arpLatchNotes.length?arpLatchNotes:
+      heldNotes.size?[...heldNotes.keys()]:arpTapNotes;
+    if(!base.length)return [];
+    const notes=[...new Set(base)];
+    const direction=$("arp-direction").value;
+    if(direction!=="asplayed"&&direction!=="random")notes.sort((a,b)=>a-b);
+    const expanded=[],octaves=Number($("arp-octaves").value);
+    for(let o=0;o<octaves;o++)notes.forEach(n=>expanded.push(n+o*12));
+    if(direction==="down")expanded.reverse();
+    if(direction==="updown"&&expanded.length>2)
+      return expanded.concat(expanded.slice(1,-1).reverse());
+    if(direction==="random"){
+      for(let i=expanded.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [expanded[i],expanded[j]]=[expanded[j],expanded[i]];
+      }
+    }
     return expanded;
   }
   function renderSteps(){
     const host=$("seq-steps");host.innerHTML="";
     const count=$("seq-mode").value==="step"?16:8;
     for(let i=0;i<count;i++){
-      const b=document.createElement("button");b.className="seq-step"+(stepEnabled[i]?" enabled":"");b.textContent=String(i+1).padStart(2,"0");b.dataset.step=i;
-      b.addEventListener("click",()=>{stepEnabled[i]=!stepEnabled[i];b.classList.toggle("enabled",stepEnabled[i]);});
+      const b=document.createElement("button");
+      b.className="seq-step"+(stepEnabled[i]?" enabled":"");
+      b.textContent=String(i+1).padStart(2,"0");b.dataset.step=i;
+      b.addEventListener("click",()=>{
+        stepEnabled[i]=!stepEnabled[i];
+        b.classList.toggle("enabled",stepEnabled[i]);
+      });
       host.append(b);
     }
     $("arp-octave-wrap").style.display=$("seq-mode").value==="arp"?"flex":"none";
     $("arp-direction").disabled=$("seq-mode").value!=="arp";
-    $("seq-help").textContent=$("seq-mode").value==="arp"?"Tap keys to build a chord; tap a key again to remove it. PLAY runs at double-time.":"Tap a root note, then PLAY. 16 pitch steps form a repeating pattern.";
+    $("seq-help").textContent=$("seq-mode").value==="arp"?
+      "Tap notes to build a chord, then PLAY. Each tap also plays the note.":
+      "Tap a root note, then PLAY. The 16-step pitch pattern follows that root.";
   }
   function stopSequence(){
-    if(seqTimer){clearTimeout(seqTimer);seqTimer=null;}
+    if(seqTimer!==null){clearInterval(seqTimer);seqTimer=null;}
+    seqEpoch++;
+    for(const timer of seqVisualTimers)clearTimeout(timer);
+    seqVisualTimers.clear();
+    for(const timer of seqGateTimers)clearTimeout(timer);
+    seqGateTimers.clear();
+    for(const v of [...voicePool])if(v.isSequence)terminateVoice(v,audio?.currentTime,true);
     if(!$("arp-latch").checked)arpTapNotes=[];
-    for(const token of [...active.keys()])if(String(token).startsWith("seq-"))stopNote(token);
     document.querySelectorAll(".seq-step").forEach(b=>b.classList.remove("playing"));
     $("seq-position").textContent="STOPPED";
     $("seq-play").textContent="▶ PLAY";
   }
   function sequenceTick(){
-    if(!seqTimer)return;
-    const mode=$("seq-mode").value,count=mode==="step"?16:8;
-    const step=seqStep%count,buttons=[...document.querySelectorAll(".seq-step")];
-    buttons.forEach(b=>b.classList.toggle("playing",Number(b.dataset.step)===step));
-    $("seq-position").textContent="STEP "+String(step+1).padStart(2,"0")+" / "+count;
-    const notes=sequenceNotes();
-    if(stepEnabled[step]&&notes.length){
-      const note=notes[mode==="step"?0:step%notes.length];
-      const token="seq-"+step;
-      startNote(note,.82,token);
-      const beat=60/Number($("seq-tempo").value),swing=Number($("seq-swing").value)/100;
-      const gate=Number($("seq-gate").value)/100;
+    if(seqTimer===null||!audio||audio.state==="suspended")return;
+    // Schedule audio on AudioContext's clock, not the unreliable JS event
+    // loop. The timer only fills the next 120 ms of the Web Audio timeline.
+    let loops=0;
+    while(seqNextTime<audio.currentTime+.12&&loops++<32){
+      const mode=$("seq-mode").value,count=mode==="step"?16:8;
+      const step=seqStep%count,epoch=seqEpoch;
+      const beat=60/Math.max(1,Number($("seq-tempo").value));
+      const swing=Number($("seq-swing").value)/100;
       const duration=beat*(step%2===0?1+swing:1-swing)*(mode==="arp"?.5:1);
-      setTimeout(()=>stopNote(token),Math.max(24,duration*gate*1000));
+      const gate=Number($("seq-gate").value)/100;
+      const notes=sequenceNotes();
+      if(stepEnabled[step]&&notes.length){
+        const note=notes[mode==="step"?0:step%notes.length];
+        const token="seq-"+epoch+"-"+seqNextTime.toFixed(5)+"-"+step;
+        const v=startNote(note,.78,token,seqNextTime);
+        if(v){
+          v.isSequence=true;
+          stopNote(token,seqNextTime+duration*gate);
+        }
+      }
+      const delay=Math.max(0,(seqNextTime-audio.currentTime)*1000);
+      const timer=setTimeout(()=>{
+        seqVisualTimers.delete(timer);
+        if(epoch!==seqEpoch)return;
+        document.querySelectorAll(".seq-step").forEach(b=>
+          b.classList.toggle("playing",Number(b.dataset.step)===step));
+        $("seq-position").textContent="STEP "+String(step+1).padStart(2,"0")+" / "+count;
+      },delay);
+      seqVisualTimers.add(timer);
+      seqNextTime+=duration;
+      seqStep=(seqStep+1)%count;
     }
-    const beat=60/Number($("seq-tempo").value),swing=Number($("seq-swing").value)/100;
-    const duration=beat*(step%2===0?1+swing:1-swing)*(mode==="arp"?.5:1);
-    seqStep=(seqStep+1)%count;
-    seqTimer=setTimeout(sequenceTick,duration*1000);
   }
   function startSequence(){
-    if(seqTimer)return;
-    if($("seq-mode").value==="arp"&&!heldNotes.size&&!arpLatchNotes.length&&!arpTapNotes.length){$("seq-position").textContent="TAP KEYS, THEN PLAY";return;}
-    if($("seq-mode").value==="step"&&!heldNotes.size&&!arpTapNotes.length){$("seq-position").textContent="TAP A ROOT NOTE FIRST";return;}
-    seqStep=0;$("seq-play").textContent="Ⅱ RUNNING";seqTimer=true;sequenceTick();
+    if(seqTimer!==null)return;
+    const mode=$("seq-mode").value;
+    if(mode==="arp"&&!heldNotes.size&&!arpLatchNotes.length&&!arpTapNotes.length){
+      $("seq-position").textContent="TAP KEYS, THEN PLAY";return;
+    }
+    if(mode==="step"&&!heldNotes.size&&!arpTapNotes.length){
+      $("seq-position").textContent="TAP A ROOT NOTE FIRST";return;
+    }
+    initAudio();
+    if(!audio)return;
+    seqEpoch++;
+    seqStep=0;
+    seqNextTime=audio.currentTime+.04;
+    $("seq-play").textContent="Ⅱ RUNNING";
+    seqTimer=setInterval(sequenceTick,25);
+    sequenceTick();
   }
 
   function buildOscillators(){
