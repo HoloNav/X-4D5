@@ -303,13 +303,53 @@ window.addEventListener("unhandledrejection", event => {
     active.delete(token);voices=active.size;updateVoices();
   }
   function stopAll(){[...active.keys()].forEach(stopNote);}
-  function bindRange(id, formatter=(v)=>v){
+  function bindRange(id,formatter=(v)=>v){
     const el=$(id),out=el.parentElement.querySelector("output");
     const update=()=>{if(out)out.textContent=formatter(Number(el.value));};
-    el.addEventListener("input",()=>{update();if(id==="master-level"&&master)master.gain.setTargetAtTime(read(id),audio.currentTime,.02);if(id==="chorus-rate"&&chorusLfo)chorusLfo.frequency.value=read(id);if(id==="chorus-mix"&&chorusWet)chorusWet.gain.value=$("chorus-on").checked?read(id):0;if(id==="reverb-mix"&&reverbWet)reverbWet.gain.value=$("reverb-on").checked?read(id):0;if(id==="reverb-size"&&convolver&&audio)convolver.buffer=makeImpulse(read(id));if(id==="lfo-depth")$("matrix-amount").textContent=read(id)+"%";if(id==="lfo-destination")$("matrix-dest").textContent=$("lfo-destination").selectedOptions[0].text;});
+    el.addEventListener("input",()=>{
+      update();
+      if(id==="master-level"&&master)master.gain.setTargetAtTime(read(id),audio.currentTime,.012);
+      if(id==="chorus-rate"&&chorusLfo)chorusLfo.frequency.setTargetAtTime(read(id),audio.currentTime,.02);
+      if(id==="chorus-mix"&&chorusWet)chorusWet.gain.setTargetAtTime(
+        $("chorus-on").checked?read(id):0,audio.currentTime,.025);
+      if(id==="reverb-mix"&&reverbWet)reverbWet.gain.setTargetAtTime(
+        $("reverb-on").checked?read(id):0,audio.currentTime,.025);
+      if(id==="lfo-depth")$("matrix-amount").textContent=read(id)+"%";
+      if(["cutoff","resonance","drive","keytrack","lfo-depth","lfo-rate","mod-wheel"].includes(id)){
+        updateLiveVoices();
+      }
+      if(id==="noise-level"||id==="sub-level")updateAuxVoices();
+    });
+    // Buffer allocation is expensive: don't rebuild an impulse on every
+    // drag pixel. Commit the change when a slider is released.
+    if(id==="reverb-size")el.addEventListener("change",()=>{
+      if(convolver&&audio)convolver.buffer=makeImpulse(read(id));
+    });
     update();
   }
 
+  function updateAuxVoices(){
+    if(!audio)return;
+    const t=audio.currentTime;
+    for(const v of voicePool){
+      if(v.ended||v.released)continue;
+      const noiseLevel=read("noise-level"),subLevel=read("sub-level");
+      if(noiseLevel>0&&!v.noise){
+        const n=audio.createBufferSource(),g=audio.createGain();
+        n.buffer=noiseBuffer;n.loop=true;g.gain.value=0;
+        n.connect(g);g.connect(v.input);n.start(t);
+        v.noise={osc:n,gain:g};v.oscs.push(v.noise);
+      }
+      if(subLevel>0&&!v.sub){
+        const osc=audio.createOscillator(),g=audio.createGain();
+        osc.type="sine";osc.frequency.value=midiHz(v.note-12);g.gain.value=0;
+        osc.connect(g);g.connect(v.input);osc.start(t);
+        v.sub={osc,gain:g};v.oscs.push(v.sub);
+      }
+      if(v.noise)v.noise.gain.gain.setTargetAtTime(noiseLevel,t,.025);
+      if(v.sub)v.sub.gain.gain.setTargetAtTime(subLevel,t,.025);
+    }
+  }
   function sequenceNotes(){
     const mode=$("seq-mode").value;
     if(mode==="step"){
