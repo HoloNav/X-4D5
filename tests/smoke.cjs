@@ -87,6 +87,25 @@ async function main(){
         'Active/releasing voice tails should be counted');
       assert.ok(!/JS ERROR/.test(await page.locator('#engine-state').innerText()),'No in-app audio error');
 
+      // Rapid 20-note overlap must stay within the 18-voice allocator cap,
+      // including currently releasing voices.
+      await page.evaluate(()=>{
+        for(let i=0;i<20;i++){
+          const key=document.querySelector('.key[data-note="'+(48+i)+'"]');
+          key.dispatchEvent(new PointerEvent('pointerdown',{
+            bubbles:true,cancelable:true,pointerId:100+i,pointerType:'touch',button:0
+          }));
+        }
+      });
+      await sleep(50);
+      assert.equal(Number((await page.locator('#voice-count').innerText()).match(/\d+/)[0]),18,
+        'Never allocate more than 18 simultaneous voice slots');
+      await page.locator('#panic').click({force:true});
+      await sleep(330);
+      assert.equal(Number((await page.locator('#voice-count').innerText()).match(/\d+/)[0]),0,
+        'PANIC must release all voices including DSP tails');
+
+
       // Saved patch must include every parameter and load back without duplicates.
       await page.locator('#save-preset').click({timeout:4000,force:true}).catch(()=>{});
       // Dismiss any unexpected modal from test automation; later use explicit
