@@ -494,21 +494,97 @@ window.addEventListener("unhandledrejection", event => {
   window.addEventListener("pointercancel",e=>releasePointer(e.pointerId));
   window.addEventListener("blur",()=>{stopSequence();stopAll()});
 
+  // Every visible sound control belongs in a user patch. Older patches
+  // (which stored only six sound values) still load with safe defaults.
+  const patchControlIds=[
+    "noise-level","sub-level","master-level","filter-type","cutoff",
+    "resonance","drive","keytrack","attack","decay","sustain","release",
+    "lfo-wave","lfo-rate","lfo-depth","lfo-destination",
+    "chorus-on","chorus-rate","chorus-mix","reverb-on","reverb-size",
+    "reverb-mix","portamento","mod-wheel"
+  ];
+  const patchDefaults=Object.fromEntries(patchControlIds.map(id=>{
+    const el=$(id);return [id,el.type==="checkbox"?el.checked:el.value];
+  }));
   function applyPreset(index){
-    currentPreset=(index+presets.length)%presets.length;const p=presets[currentPreset];
-    $("patch-name").textContent=p.name;document.querySelector(".screen-meta span:first-child").textContent="PATCH / A-"+String(currentPreset+1).padStart(3,"0");
-    p.wave.forEach((w,i)=>{oscSettings[i].wave=w;oscSettings[i].level=p.level[i];oscSettings[i].oct=p.oct[i];const row=$("oscillators").children[i];row.querySelectorAll("select")[0].value=w;row.querySelectorAll("select")[1].value=p.oct[i];const mix=$("mixer-controls").children[i];mix.querySelector("input").value=p.level[i];mix.querySelector("output").textContent=Math.round(p.level[i]*100)+"%";});
-    ["cutoff","resonance","attack","decay","sustain","release"].forEach(id=>{$(id).value=p[id];$(id).dispatchEvent(new Event("input"));});
+    const isFactory=typeof index==="number";
+    currentPreset=isFactory?(index%presets.length+presets.length)%presets.length:-1;
+    const p=isFactory?presets[currentPreset]:index;
+    if(!p||!Array.isArray(p.wave)||!Array.isArray(p.level)||!Array.isArray(p.oct))return;
+    $("patch-name").textContent=p.name||"USER PATCH";
+    document.querySelector(".screen-meta span:first-child").textContent=isFactory?
+      "PATCH / A-"+String(currentPreset+1).padStart(3,"0"):"PATCH / USER";
+    p.wave.forEach((w,i)=>{
+      if(!oscSettings[i])return;
+      oscSettings[i].wave=w;
+      oscSettings[i].level=clamp(Number(p.level[i]||0),0,.8);
+      oscSettings[i].oct=Number(p.oct[i]||0);
+      const row=$("oscillators").children[i],mix=$("mixer-controls").children[i];
+      row.querySelectorAll("select")[0].value=w;
+      row.querySelectorAll("select")[1].value=String(oscSettings[i].oct);
+      mix.querySelector("input").value=String(oscSettings[i].level);
+      mix.querySelector("output").textContent=Math.round(oscSettings[i].level*100)+"%";
+    });
+    const controls=p.controls||{};
+    patchControlIds.forEach(id=>{
+      const el=$(id);
+      const value=(p[id]!==undefined?p[id]:
+        controls[id]!==undefined?controls[id]:patchDefaults[id]);
+      if(el.type==="checkbox")el.checked=Boolean(value);
+      else el.value=String(value);
+      el.dispatchEvent(new Event("input",{bubbles:true}));
+    });
+    // Final controls can affect notes already sounding or their shared FX.
+    updateLiveVoices();updateAuxVoices();
+    if(chorusWet&&audio)chorusWet.gain.setTargetAtTime(
+      $("chorus-on").checked?read("chorus-mix"):0,audio.currentTime,.02);
+    if(reverbWet&&audio)reverbWet.gain.setTargetAtTime(
+      $("reverb-on").checked?read("reverb-mix"):0,audio.currentTime,.02);
+    if(convolver&&audio)convolver.buffer=makeImpulse(read("reverb-size"));
+    $("matrix-dest").textContent=$("lfo-destination").selectedOptions[0].text;
+  }
+  function readSavedPatches(){
+    try{
+      const parsed=JSON.parse(localStorage.getItem("x4d5-patches")||"[]");
+      return Array.isArray(parsed)?parsed:[];
+    }catch(err){console.warn("Patch library could not be read",err);return [];}
   }
   function savePatch(){
-    const p={name:prompt("Name this patch:",$("patch-name").textContent)};if(!p.name)return;
-    p.wave=oscSettings.map(x=>x.wave);p.level=oscSettings.map(x=>x.level);p.oct=oscSettings.map(x=>x.oct);
-    ["cutoff","resonance","attack","decay","sustain","release"].forEach(id=>p[id]=read(id));
-    const saved=JSON.parse(localStorage.getItem("x4d5-patches")||"[]");saved.push(p);localStorage.setItem("x4d5-patches",JSON.stringify(saved));renderPatchList();$("patch-name").textContent=p.name;
+    const name=prompt("Name this patch:",$("patch-name").textContent);
+    if(!name||!name.trim())return;
+    const p={name:name.trim().slice(0,80)};
+    p.wave=oscSettings.map(x=>x.wave);
+    p.level=oscSettings.map(x=>x.level);
+    p.oct=oscSettings.map(x=>x.oct);
+    p.controls=Object.fromEntries(patchControlIds.map(id=>{
+      const el=$(id);return [id,el.type==="checkbox"?el.checked:el.value];
+    }));
+    // Legacy properties allow projects created with 0.1 to keep loading.
+    ["cutoff","resonance","attack","decay","sustain","release"].forEach(
+      id=>p[id]=read(id));
+    const saved=readSavedPatches();saved.push(p);
+    try{
+      localStorage.setItem("x4d5-patches",JSON.stringify(saved));
+      renderPatchList();$("patch-name").textContent=p.name;
+      document.querySelector(".screen-meta span:first-child").textContent="PATCH / USER";
+      currentPreset=-1;
+    }catch(err){
+      $("engine-state").textContent="COULD NOT SAVE PATCH";
+      console.error(err);
+    }
   }
   function renderPatchList(){
-    const host=$("patch-list"),saved=JSON.parse(localStorage.getItem("x4d5-patches")||"[]");host.innerHTML="";
-    saved.forEach((p,i)=>{const b=document.createElement("button");b.className="patch-item";b.innerHTML='<strong></strong><span>USER '+String(i+1).padStart(2,"0")+'</span>';b.querySelector("strong").textContent=p.name;b.addEventListener("click",()=>{presets.push(p);applyPreset(presets.length-1);});host.append(b);});
+    const host=$("patch-list"),saved=readSavedPatches();host.replaceChildren();
+    saved.forEach((p,i)=>{
+      const b=document.createElement("button");
+      b.className="patch-item";
+      const name=document.createElement("strong"),slot=document.createElement("span");
+      name.textContent=p.name||"UNTITLED";
+      slot.textContent="USER "+String(i+1).padStart(2,"0");
+      b.append(name,slot);
+      b.addEventListener("click",()=>applyPreset(p));
+      host.append(b);
+    });
     if(!saved.length)host.textContent="NO USER PATCHES SAVED";
   }
   buildOscillators();buildKeyboard();
