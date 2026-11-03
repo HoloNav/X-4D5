@@ -259,50 +259,6 @@ window.addEventListener("unhandledrejection", event => {
     document.querySelectorAll(".key.active").forEach(x=>x.classList.remove("active"));
   }
   function read(id){return Number($(id).value);}
-  function updateVoices(){ $("voice-count").textContent=voices+" VOICES ACTIVE"; }
-  function startNote(note, velocity=0.82, token=note){
-    initAudio(); if(!audio || active.has(token)) return;
-    if(active.size>=18){const oldest=active.keys().next().value;stopNote(oldest);}
-    const now=audio.currentTime, filter=audio.createBiquadFilter();
-    filter.type=$("filter-type").value; filter.frequency.value=read("cutoff"); filter.Q.value=read("resonance");
-    const amp=audio.createGain(), drive=read("drive");
-    let input=audio.createGain(); input.gain.value=drive>0?1+drive*12:1;
-    input.connect(filter); filter.connect(amp); amp.connect(dryGain);
-    const oscs=[];
-    oscSettings.forEach((setting,i)=>{
-      const osc=audio.createOscillator(), gain=audio.createGain();
-      osc.type=setting.wave; osc.frequency.value=midiHz(note+setting.oct*12);
-      gain.gain.value=setting.level;
-      osc.connect(gain); gain.connect(input); osc.start(now);
-      oscs.push({osc,gain});
-    });
-    const noiseLevel=read("noise-level");
-    if(noiseLevel>0){const n=audio.createBufferSource(),b=audio.createBuffer(1,audio.sampleRate,audio.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;n.buffer=b;n.loop=true;const g=audio.createGain();g.gain.value=noiseLevel;n.connect(g);g.connect(input);n.start();oscs.push({osc:n,gain:g});}
-    const subLevel=read("sub-level");
-    if(subLevel>0){const sub=audio.createOscillator(),g=audio.createGain();sub.type="sine";sub.frequency.value=midiHz(note-12);g.gain.value=subLevel;sub.connect(g);g.connect(input);sub.start();oscs.push({osc:sub,gain:g});}
-    const attack=read("attack"),decay=read("decay"),sustain=read("sustain");
-    amp.gain.setValueAtTime(.0001,now);amp.gain.linearRampToValueAtTime(Math.max(.0001,velocity),now+attack);amp.gain.linearRampToValueAtTime(Math.max(.0001,velocity*sustain),now+attack+decay);
-    // Optional pitch vibrato, routed to all pitched oscillators.
-    const lfo=audio.createOscillator(),lfoGain=audio.createGain();
-    lfo.type=$("lfo-wave").value;lfo.frequency.value=read("lfo-rate");
-    const depth=read("lfo-depth")/100;
-    const dest=$("lfo-destination").value;
-    if(dest==="pitch"){lfoGain.gain.value=depth*18;oscs.filter(x=>x.osc.frequency).forEach(x=>lfo.connect(lfoGain).connect(x.osc.detune));}
-    else if(dest==="cutoff"){lfoGain.gain.value=depth*3000;lfo.connect(lfoGain).connect(filter.frequency);}
-    else {lfoGain.gain.value=depth*.45;oscs.slice(0,3).forEach(x=>lfo.connect(lfoGain).connect(x.gain.gain));}
-    lfo.start(now);
-    active.set(token,{amp,oscs,filter,lfo,lfoGain});
-    voices=active.size;updateVoices();
-  }
-  function stopNote(token){
-    const v=active.get(token); if(!v||!audio)return;
-    const now=audio.currentTime, release=read("release");
-    v.amp.gain.cancelScheduledValues(now);v.amp.gain.setTargetAtTime(.0001,now,Math.max(.01,release/4));
-    v.oscs.forEach(o=>{try{o.osc.stop(now+release+.08);}catch(e){}});
-    try{v.lfo.stop(now+release+.08);}catch(e){}
-    active.delete(token);voices=active.size;updateVoices();
-  }
-  function stopAll(){[...active.keys()].forEach(stopNote);}
   function bindRange(id,formatter=(v)=>v){
     const el=$(id),out=el.parentElement.querySelector("output");
     const update=()=>{if(out)out.textContent=formatter(Number(el.value));};
