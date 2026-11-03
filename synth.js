@@ -10,7 +10,7 @@
     {name:"NEON STRINGS",wave:["sawtooth","sawtooth","triangle"],level:[.3,.32,.2],oct:[0,0,1],cutoff:3400,resonance:1.1,attack:.65,decay:1.2,sustain:.68,release:2.8}
   ];
   let audio = null, master = null, active = new Map(), currentPreset = 0, voices = 0;
-  let chorusDelay, chorusLfo, chorusWet, dryGain, reverbWet, reverbDry, convolver;
+  let chorusDelay, chorusLfo, chorusWet, dryGain, reverbWet, reverbDry, convolver;\n  let seqTimer=null, seqStep=0, seqDirection=1, heldNotes=new Map(), arpLatchNotes=[];\n  let stepEnabled=Array(16).fill(true), stepOffsets=[0,2,4,7,9,7,4,2,0,-3,-5,-3,0,2,4,7];
   const oscSettings = [0,1,2].map(i => ({wave:"sawtooth",level:[.55,.28,.2][i],oct:0}));
   const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
   const keyMap = {a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:72};
@@ -95,7 +95,70 @@
     el.addEventListener("input",()=>{update();if(id==="master-level"&&master)master.gain.setTargetAtTime(read(id),audio.currentTime,.02);if(id==="chorus-rate"&&chorusLfo)chorusLfo.frequency.value=read(id);if(id==="chorus-mix"&&chorusWet)chorusWet.gain.value=$("chorus-on").checked?read(id):0;if(id==="reverb-mix"&&reverbWet)reverbWet.gain.value=$("reverb-on").checked?read(id):0;if(id==="reverb-size"&&convolver&&audio)convolver.buffer=makeImpulse(read(id));if(id==="lfo-depth")$("matrix-amount").textContent=read(id)+"%";if(id==="lfo-destination")$("matrix-dest").textContent=$("lfo-destination").selectedOptions[0].text;});
     update();
   }
-  function buildOscillators(){
+
+  function sequenceNotes(){
+    const mode=$("seq-mode").value;
+    if(mode==="step"){
+      const root=heldNotes.size?[...heldNotes.keys()].sort((a,b)=>a-b)[0]:60;
+      return [root+stepOffsets[seqStep%16]];
+    }
+    const notes=arpLatchNotes.length?arpLatchNotes:[...heldNotes.keys()].sort((a,b)=>a-b);
+    if(!notes.length)return [];
+    const expanded=[];const oct=Number($("arp-octaves").value);
+    for(let o=0;o<oct;o++)notes.forEach(n=>expanded.push(n+o*12));
+    const dir=$("arp-direction").value;
+    if(dir==="down")expanded.reverse();
+    if(dir==="updown"&&expanded.length>2){const up=expanded.slice(0,-1),down=expanded.slice(1).reverse();return up.concat(down);}
+    if(dir==="random"){for(let i=expanded.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[expanded[i],expanded[j]]=[expanded[j],expanded[i]];}}
+    return expanded;
+  }
+  function renderSteps(){
+    const host=$("seq-steps");host.innerHTML="";
+    const count=$("seq-mode").value==="step"?16:8;
+    for(let i=0;i<count;i++){
+      const b=document.createElement("button");b.className="seq-step"+(stepEnabled[i]?" enabled":"");b.textContent=String(i+1).padStart(2,"0");b.dataset.step=i;
+      b.addEventListener("click",()=>{stepEnabled[i]=!stepEnabled[i];b.classList.toggle("enabled",stepEnabled[i]);});
+      host.append(b);
+    }
+    $("arp-octave-wrap").style.display=$("seq-mode").value==="arp"?"flex":"none";
+    $("arp-direction").disabled=$("seq-mode").value!=="arp";
+    $("seq-help").textContent=$("seq-mode").value==="arp"?"Hold a chord, then PLAY. Toggle steps for rhythmic rests.":"Hold a root note, then PLAY. 16 pitch steps form a repeating pattern.";
+  }
+  function stopSequence(){
+    if(seqTimer){clearTimeout(seqTimer);seqTimer=null;}
+    for(const token of [...active.keys()])if(String(token).startsWith("seq-"))stopNote(token);
+    document.querySelectorAll(".seq-step").forEach(b=>b.classList.remove("playing"));
+    $("seq-position").textContent="STOPPED";
+    $("seq-play").textContent="▶ PLAY";
+  }
+  function sequenceTick(){
+    if(!seqTimer)return;
+    const mode=$("seq-mode").value,count=mode==="step"?16:8;
+    const step=seqStep%count,buttons=[...document.querySelectorAll(".seq-step")];
+    buttons.forEach(b=>b.classList.toggle("playing",Number(b.dataset.step)===step));
+    $("seq-position").textContent="STEP "+String(step+1).padStart(2,"0")+" / "+count;
+    const notes=sequenceNotes();
+    if(stepEnabled[step]&&notes.length){
+      const note=notes[mode==="step"?0:step%notes.length];
+      const token="seq-"+step;
+      startNote(note,.82,token);
+      const beat=60/Number($("seq-tempo").value),swing=Number($("seq-swing").value)/100;
+      const gate=Number($("seq-gate").value)/100;
+      const duration=beat*(step%2===0?1+swing:1-swing);
+      setTimeout(()=>stopNote(token),Math.max(30,duration*gate*1000));
+    }
+    const beat=60/Number($("seq-tempo").value),swing=Number($("seq-swing").value)/100;
+    const duration=beat*(step%2===0?1+swing:1-swing);
+    seqStep=(seqStep+1)%count;
+    seqTimer=setTimeout(sequenceTick,duration*1000);
+  }
+  function startSequence(){
+    if(seqTimer)return;
+    if($("seq-mode").value==="arp"&&!heldNotes.size&&!arpLatchNotes.length){$("seq-position").textContent="HOLD NOTES FIRST";return;}
+    if($("seq-mode").value==="step"&&!heldNotes.size){$("seq-position").textContent="HOLD A ROOT NOTE";return;}
+    seqStep=0;$("seq-play").textContent="Ⅱ RUNNING";seqTimer=true;sequenceTick();
+  }
+\n  function buildOscillators(){
     const host=$("oscillators"),mix=$("mixer-controls");
     const waves=[["sawtooth","SAW"],["square","SQUARE"],["triangle","TRIANGLE"],["sine","SINE"]];
     for(let i=0;i<3;i++){
@@ -118,12 +181,12 @@
       key.textContent=pc===0?"C"+(Math.floor(note/12)-1):"";
       if(black.includes(pc)){const whiteBefore=n-black.filter(b=>b<pc).length;key.style.left=(whiteBefore*100/15+100/30)+"%";}
       else key.style.flex="1";
-      key.addEventListener("pointerdown",e=>{e.preventDefault();key.setPointerCapture(e.pointerId);key.classList.add("active");startNote(note,.85,"ptr-"+e.pointerId);});
+      key.addEventListener("pointerdown",e=>{e.preventDefault();key.setPointerCapture(e.pointerId);key.classList.add("active");heldNotes.set(note,true);startNote(note,.85,"ptr-"+e.pointerId);});
       const release=()=>{key.classList.remove("active");stopNote("ptr-"+lastPointer);};
       let lastPointer;
       key.addEventListener("pointerdown",e=>lastPointer=e.pointerId);
-      key.addEventListener("pointerup",e=>{key.classList.remove("active");stopNote("ptr-"+e.pointerId);});
-      key.addEventListener("pointercancel",e=>{key.classList.remove("active");stopNote("ptr-"+e.pointerId);});
+      key.addEventListener("pointerup",e=>{key.classList.remove("active");stopNote("ptr-"+e.pointerId);heldNotes.delete(note);if($("arp-latch").checked&&heldNotes.size===0)arpLatchNotes=[...new Set([...arpLatchNotes,note])];});
+      key.addEventListener("pointercancel",e=>{key.classList.remove("active");stopNote("ptr-"+e.pointerId);heldNotes.delete(note);});
       host.append(key);
     }
   }
@@ -157,7 +220,7 @@
   $("lfo-destination").addEventListener("change",()=>{$("matrix-dest").textContent=$("lfo-destination").selectedOptions[0].text;});
   $("panic").addEventListener("click",stopAll);$("prev-preset").addEventListener("click",()=>applyPreset(currentPreset-1));$("next-preset").addEventListener("click",()=>applyPreset(currentPreset+1));$("save-preset").addEventListener("click",savePatch);
   document.querySelectorAll(".mode-tab").forEach(tab=>tab.addEventListener("click",()=>{document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active",t===tab));document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id===tab.dataset.target));}));
-  window.addEventListener("keydown",e=>{if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||e.target.matches("input,select,textarea"))return;const note=keyMap[e.key.toLowerCase()];if(note!==undefined){const shifted=note+Number($("octave").value)*12;startNote(shifted,.8,"kbd-"+e.key.toLowerCase());const key=$(' .key[data-note="'+shifted+'"]'.trim());if(key)key.classList.add("active");}});
-  window.addEventListener("keyup",e=>{const k="kbd-"+e.key.toLowerCase();stopNote(k);const note=keyMap[e.key.toLowerCase()];if(note!==undefined){const key=$('.key[data-note="'+(note+Number($("octave").value)*12)+'"]');if(key)key.classList.remove("active");}});
-  $("patch-name").textContent=presets[0].name;applyPreset(0);renderPatchList();
+  window.addEventListener("keydown",e=>{if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||e.target.matches("input,select,textarea"))return;const note=keyMap[e.key.toLowerCase()];if(note!==undefined){const shifted=note+Number($("octave").value)*12;heldNotes.set(shifted,true);startNote(shifted,.8,"kbd-"+e.key.toLowerCase());const key=$(' .key[data-note="'+shifted+'"]'.trim());if(key)key.classList.add("active");}});
+  window.addEventListener("keyup",e=>{const k="kbd-"+e.key.toLowerCase();stopNote(k);const held=keyMap[e.key.toLowerCase()];if(held!==undefined){const shifted=held+Number($("octave").value)*12;heldNotes.delete(shifted);if($("arp-latch").checked&&heldNotes.size===0)arpLatchNotes=[...new Set([...arpLatchNotes,shifted])];}const note=keyMap[e.key.toLowerCase()];if(note!==undefined){const key=$('.key[data-note="'+(note+Number($("octave").value)*12)+'"]');if(key)key.classList.remove("active");}});
+  $("seq-mode").addEventListener("change",()=>{stopSequence();seqStep=0;renderSteps();});\n  $("seq-play").addEventListener("click",startSequence);$("seq-stop").addEventListener("click",stopSequence);\n  $("seq-all").addEventListener("click",()=>{stepEnabled.fill(true);renderSteps();});\n  $("seq-clear").addEventListener("click",()=>{stepEnabled.fill(false);arpLatchNotes=[];renderSteps();});\n  $("arp-latch").addEventListener("change",e=>{if(!e.target.checked)arpLatchNotes=[];else if(heldNotes.size)arpLatchNotes=[...heldNotes.keys()];});\n  bindRange("seq-tempo",v=>Math.round(v)+" BPM");bindRange("seq-gate",v=>Math.round(v)+"%");bindRange("seq-swing",v=>Math.round(v)+"%");\n  renderSteps();$("patch-name").textContent=presets[0].name;applyPreset(0);renderPatchList();
 })();
