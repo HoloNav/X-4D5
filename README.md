@@ -1,43 +1,38 @@
-# X-4D5
+# X-4D5 — S.E.N.S.E. Polyphonic Synthesizer
 
-**A performance-focused virtual synthesizer by S.E.N.S.E.**
+**[Launch the live browser synthesizer](https://holonav.github.io/X-4D5/)**
 
-X-4D5 is an original browser-based synthesizer project. It is being developed as a playable software instrument, with a tactile hardware-inspired interface and a deep, editable subtractive/wavetable synthesis architecture.
+An original performance-focused software synthesizer by **S.E.N.S.E.** Built with Web Audio and designed for desktop and touch browsers.
 
-## Run it
+## Current build — 0.2 repaired audio foundation
 
-Open `index.html` in a modern desktop or mobile browser. For the most reliable audio behavior and deployment, serve the folder from a local or hosted web server. Tap or click a key once to unlock browser audio.
+The original **0.1** implementation has been preserved in the GitHub branch `backup/v0.1-before-audio-repair`. Version 0.2 specifically repairs problems identified in a source-code audit while retaining the existing interface and factory-patch names.
 
-## Current build — 0.1 foundation
+### Repairs
 
-- Three independently configurable oscillators (saw, square, triangle, sine)
-- 18-voice allocation target with voice stealing
-- Noise and sub-oscillator sources
-- Oscillator mixer and master level
-- Resonant low-pass, band-pass, and high-pass filtering
-- Amp ADSR envelope
-- LFO with pitch, cutoff, and amplitude destinations
-- Chorus and algorithmic reverb
-- Touch, mouse, and computer-keyboard performance
-- Starter patches and local user patch saving
-- Responsive instrument-panel interface
+- **Chorus routing:** The dry output now feeds the chorus delay; Rate and Mix controls change the live effect.
+- **Filter:** Two cascaded biquad stages provide 24 dB/octave low-pass/high-pass options (plus band-pass); filter cutoff, resonance, type and pitch-based key tracking now update *currently sounding* voices.
+- **Distortion:** Drive now uses a waveshaping curve rather than just amplifying volume.
+- **Modulation:** LFO Rate, Depth, Wave and Destination can be changed live; modulation wheel adds depth, and portamento glides between notes. The old incorrectly labeled **PULSE WIDTH** destination is now honestly labeled **AMPLITUDE / TREMOLO**; oscillator PWM itself is a future feature.
+- **Oscillators:** Waveform, octave and mixer level changes reach held notes.
+- **Keyboard:** Repeated key presses make sound normally instead of toggling off; black notes align correctly in both octaves; pointer capture and note releases are more reliable; keyboard octave shifts apply to pointer/touch and computer performance.
+- **Sequencer:** Audio notes are now placed on the Web Audio clock with a 120ms lookahead and a 25ms scheduler. Old note-offs and scheduled notes are cancelled/ended when stopping or using PANIC. AS PLAYED maintains chord-entry order. Select Arpeggiator or Step mode, then tap notes before PLAY.
+- **18-voice handling:** Release tails count toward voice capacity; stealing uses a short fade; voice cleanup disconnects nodes. Noise uses a shared buffer instead of creating a new second-long buffer per note. Reverb impulse rebuilds on slider **release**, not every movement.
+- **Patch library:** Saves and restores 24 controls (including effects, LFO, drive, glide, and performance settings) as well as oscillators. Earlier six-parameter patches remain loadable. Loading a saved patch no longer duplicates it in the preset selector.
 
-## Development roadmap
+### How to play
 
-1. **Core voice engine:** refine oscillator modes, phase behavior, envelopes, dual filters, voice allocation, and modulation routing.
-2. **Oscillator expansion:** wavetable playback, additional digital waveforms, sync, ring modulation, and per-oscillator modulation.
-3. **Modulation architecture:** multiple envelopes and LFOs, velocity, key tracking, mod wheel, and a configurable modulation matrix.
-4. **Performance system:** arpeggiator, chord memory, performance/animate controls, MIDI input, and patch management.
-5. **Effects rack:** expanded insert effects, routing, and per-patch effect chains.
-6. **Preset system and polish:** import/export, categorized factory sounds created for X-4D5, accessibility, mobile tuning, and deployment.
+1. Press the on-screen keyboard, or use computer keys **A–K**. The browser audio engine starts on the first note.
+2. Go to **PERFORM** to choose ARPEGGIATOR or 16-STEP SEQUENCER. Tap one or more notes, then select **PLAY**. Use **STOP** or **PANIC** to halt.
+3. Switch to **SYNTH**, **MODULATION**, and **EFFECTS** to adjust the sound in real time.
+4. Use **SAVE PATCH** to store user sounds in this browser. Saved patches appear under **PERFORM → PATCH MEMORY**.
 
-## Design principles
+### Verification and limits
 
-- Original S.E.N.S.E. identity, interface artwork, code, and presets.
-- No copied proprietary firmware, factory patches, samples, or artwork from other instruments.
-- Build the sound engine and signal flow as documented, testable software components.
-- Keep the instrument usable on both phones and computers.
+`.github/workflows/engine-test.yml` runs JavaScript syntax checks and headless Chromium tests at **390×844 portrait**, **844×390 landscape**, and **740×360 landscape**. The tests verify repeat key presses, black-key geometry, Web Audio routing, live controls, saved-patch restoration, step/arp playback, PANIC, and voice allocation.
 
-## Status
+**Not yet implemented:** True wavetable oscillators, oscillator hard sync, ring modulation, native MIDI, a complete user-definable modulation matrix, and true PWM. The LFO amplifier destination is tremolo, not pulse-width modulation. The sequencer supports step enable/disable and a pitch-offset pattern, not full independent per-step note editing. The two cascaded biquads are a digital approximation rather than an analog component-level filter model.
 
-Early playable foundation. The roadmap describes planned work; not every listed feature is implemented yet.
+Physical-device testing is still needed to assess latency, audio clicks, battery use, and browser-specific behavior.
+
+This project is an independent original S.E.N.S.E. instrument; no third-party proprietary firmware, samples or patches have been copied.
