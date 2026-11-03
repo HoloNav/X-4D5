@@ -1,0 +1,38 @@
+name: X-4D5 Audio Engine Regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'synth.js'
+      - 'index.html'
+      - 'styles.css'
+      - 'tests/**'
+      - '.github/workflows/engine-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audio-browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: node --check synth.js && node --check tests/smoke.cjs
+      - name: Install browser test runner
+        run: npm install --no-save playwright-core@1.56.1
+      - name: Exercise keys, synth engine and step/arpeggiator
+        run: node tests/smoke.cjs
+      - name: Save screenshots for debugging
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: X-4D5-Engine-Browser-Checks
+          path: screenshots/
+          if-no-files-found: ignore
