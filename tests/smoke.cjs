@@ -112,6 +112,8 @@ async function main(){
         'Reloading a user patch must not duplicate the library');
 
       // Both arp and step modes should run and respond to stop/PANIC.
+      // The sequencer needs a root note after dialogs/blur reset held notes.
+      await page.locator('.key[data-note="60"]').click({force:true});
       await page.locator('#seq-mode').selectOption('step');
       assert.equal(await page.locator('#seq-steps .seq-step').count(),16);
       await page.locator('#seq-play').click({force:true});
