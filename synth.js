@@ -139,7 +139,9 @@ window.addEventListener("unhandledrejection", event => {
     if(!audio)return;
     const t=audio.currentTime;
     for(const v of voicePool){
-      if(v.ended)continue;
+      // Voices already in their release tail retain their original patch
+      // sound and aren't reconfigured as the user edits another preset.
+      if(v.ended||v.released)continue;
       v.filters.forEach(f=>{
         f.type=$("filter-type").value;
         f.frequency.setTargetAtTime(filterCutoff(v.note),t,.012);
@@ -160,7 +162,9 @@ window.addEventListener("unhandledrejection", event => {
     if(!audio||!v||v.ended)return;
     const t=Math.max(audio.currentTime,atTime??audio.currentTime);
     const release=fast?.012:read("release");
-    const stopAt=Math.max(t,v.when||0)+release+.035;
+    // A hard STOP/PANIC must cancel future, lookahead-scheduled notes too.
+    // Delaying until v.when would allow a canceled note to sound later.
+    const stopAt=fast?t+.035:Math.max(t,v.when||0)+release+.035;
     if(v.cleanupTimer)clearTimeout(v.cleanupTimer);
     const gain=v.amp.gain;
     if(typeof gain.cancelAndHoldAtTime==="function")gain.cancelAndHoldAtTime(t);
@@ -511,6 +515,13 @@ window.addEventListener("unhandledrejection", event => {
     currentPreset=isFactory?(index%presets.length+presets.length)%presets.length:-1;
     const p=isFactory?presets[currentPreset]:index;
     if(!p||!Array.isArray(p.wave)||!Array.isArray(p.level)||!Array.isArray(p.oct))return;
+    // Prevent "18 VOICES ACTIVE" saturation and layered notes while tapping
+    // through patches: changing a patch stops the old performance entirely.
+    // This is intentional and applies to user patches as well as factory ones.
+    if(seqTimer!==null||voicePool.size||active.size){
+      stopSequence();
+      stopAll();
+    }
     $("patch-name").textContent=p.name||"USER PATCH";
     document.querySelector(".screen-meta span:first-child").textContent=isFactory?
       "PATCH / A-"+String(currentPreset+1).padStart(3,"0"):"PATCH / USER";
