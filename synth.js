@@ -1,3 +1,11 @@
+window.addEventListener("error", event => {
+  const status = document.getElementById("engine-state");
+  if (status) status.textContent = "JS ERROR: " + (event.message || "unknown error");
+});
+window.addEventListener("unhandledrejection", event => {
+  const status = document.getElementById("engine-state");
+  if (status) status.textContent = "JS ERROR: " + (event.reason?.message || String(event.reason));
+});
 (() => {
   const $ = (id) => document.getElementById(id);
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
