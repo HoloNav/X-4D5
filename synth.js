@@ -221,18 +221,19 @@ window.addEventListener("unhandledrejection", event => {
       osc.connect(gain);gain.connect(input);osc.start(now);
       oscs.push({osc,gain});
     });
+    let noiseVoice=null,subVoice=null;
     const noiseLevel=read("noise-level");
     if(noiseLevel>0){
       const n=audio.createBufferSource(),g=audio.createGain();n.buffer=noiseBuffer;
       n.loop=true;g.gain.value=noiseLevel;n.connect(g);g.connect(input);n.start(now);
-      oscs.push({osc:n,gain:g});
+      noiseVoice={osc:n,gain:g};oscs.push(noiseVoice);
     }
     const subLevel=read("sub-level");
     if(subLevel>0){
       const sub=audio.createOscillator(),g=audio.createGain();
       sub.type="sine";sub.frequency.setValueAtTime(midiHz(note-12),now);
       g.gain.value=subLevel;sub.connect(g);g.connect(input);sub.start(now);
-      oscs.push({osc:sub,gain:g});
+      subVoice={osc:sub,gain:g};oscs.push(subVoice);
     }
     const attack=read("attack"),decay=read("decay"),sustain=read("sustain");
     amp.gain.setValueAtTime(.00001,now);
@@ -241,6 +242,7 @@ window.addEventListener("unhandledrejection", event => {
     const lfo=audio.createOscillator(),lfoGain=audio.createGain();
     lfo.connect(lfoGain);
     const v={token,note,when:now,amp,oscs,filters,drive,input,tremolo,lfo,lfoGain,
+      noise:noiseVoice,sub:subVoice,isSequence:false,
       released:false,ended:false,cleanupTimer:null};
     configureLfo(v);lfo.start(now);
     active.set(token,v);voicePool.add(v);lastMidi=note;updateVoices();
@@ -255,7 +257,7 @@ window.addEventListener("unhandledrejection", event => {
     for(const v of [...voicePool])terminateVoice(v,audio?.currentTime,true);
     active.clear();
     heldNotes.clear();
-    pointerNotes.clear();
+    pointerNotes.clear();computerHeld.clear();
     document.querySelectorAll(".key.active").forEach(x=>x.classList.remove("active"));
   }
   function read(id){return Number($(id).value);}
