@@ -116,6 +116,26 @@
     </section>
 
     <section id="perform-panel" class="panel">
+      <section class="module sequencer-module">
+        <div class="module-heading"><span>10 — ARPEGGIATOR / SEQUENCER</span><small>PERFORMANCE PATTERN GENERATOR</small></div>
+        <div class="seq-toolbar">
+          <label class="control"><span>MODE</span><select id="seq-mode"><option value="arp">ARPEGGIATOR · 8 STEP</option><option value="step">16-STEP SEQUENCER</option></select></label>
+          <label class="control"><span>DIRECTION</span><select id="arp-direction"><option value="up">UP</option><option value="down">DOWN</option><option value="updown">UP / DOWN</option><option value="asplayed">AS PLAYED</option><option value="random">RANDOM</option></select></label>
+          <label class="control"><span>TEMPO</span><input id="seq-tempo" type="range" min="40" max="240" step="1" value="120"><output>120 BPM</output></label>
+          <label class="control"><span>GATE</span><input id="seq-gate" type="range" min="10" max="100" step="1" value="70"><output>70%</output></label>
+          <label class="control"><span>SWING</span><input id="seq-swing" type="range" min="0" max="60" step="1" value="0"><output>0%</output></label>
+          <label class="control" id="arp-octave-wrap"><span>OCTAVE RANGE</span><select id="arp-octaves"><option value="1">1 OCTAVE</option><option value="2" selected>2 OCTAVES</option><option value="3">3 OCTAVES</option><option value="4">4 OCTAVES</option></select></label>
+        </div>
+        <div class="step-label-row"><span id="seq-help">Hold a chord, then PLAY. Toggle steps for rhythmic rests.</span><span id="seq-position">STOPPED</span></div>
+        <div id="seq-steps" class="seq-steps" aria-label="Arpeggiator steps"></div>
+        <div class="seq-actions">
+          <button id="seq-play" class="action-button">▶ PLAY</button>
+          <button id="seq-stop" class="utility-button">■ STOP</button>
+          <button id="seq-all" class="utility-button">ALL STEPS</button>
+          <button id="seq-clear" class="utility-button">CLEAR</button>
+          <label class="toggle-row seq-latch"><span>LATCH</span><input id="arp-latch" type="checkbox"><b></b></label>
+        </div>
+      </section>
       <div class="module-grid two-col">
         <section class="module">
           <div class="module-heading"><span>09 — PERFORMANCE</span><small>LIVE CONTROL</small></div>
