@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11151b">
+  <meta name="description" content="X-4D5 — a performance-focused virtual synthesizer by S.E.N.S.E.">
+  <title>X-4D5 — S.E.N.S.E.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="instrument" aria-label="X-4D5 virtual synthesizer">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">S</span><span>S.E.N.S.E.</span></div>
+      <div class="product-lockup"><span class="product-name">X-4D5</span><span class="product-type">POLYPHONIC SYNTHESIZER</span></div>
+      <div class="top-actions">
+        <span class="status"><i></i> AUDIO ENGINE</span>
+        <button id="panic" class="utility-button" title="Stop all notes">PANIC</button>
+      </div>
+    </header>
+
+    <section class="display-row">
+      <div class="screen">
+        <div class="screen-meta"><span>PATCH / A-001</span><span id="engine-state">ENGINE STANDBY</span></div>
+        <div class="patch-line"><strong id="patch-name">INITIAL PATCH</strong><span class="patch-category">SYNTH / INIT</span></div>
+        <div class="screen-bottom"><span>18 VOICES · POLYPHONIC</span><span id="voice-count">0 VOICES ACTIVE</span></div>
+      </div>
+      <div class="patch-controls">
+        <button id="prev-preset" class="nav-button" aria-label="Previous preset">◀</button>
+        <button id="next-preset" class="nav-button" aria-label="Next preset">▶</button>
+        <button id="save-preset" class="action-button">SAVE PATCH</button>
+      </div>
+    </section>
+
+    <nav class="mode-tabs" aria-label="Synthesizer sections">
+      <button class="mode-tab active" data-target="main-panel">SYNTH</button>
+      <button class="mode-tab" data-target="mod-panel">MODULATION</button>
+      <button class="mode-tab" data-target="fx-panel">EFFECTS</button>
+      <button class="mode-tab" data-target="perform-panel">PERFORM</button>
+    </nav>
+
+    <section id="main-panel" class="panel active">
+      <div class="module-grid">
+        <section class="module oscillators">
+          <div class="module-heading"><span>01 — OSCILLATORS</span><small>THREE SOUND SOURCES</small></div>
+          <div id="oscillators"></div>
+          <div class="control-row compact">
+            <label class="control"><span>NOISE</span><input id="noise-level" type="range" min="0" max="0.5" step="0.01" value="0"><output>0</output></label>
+            <label class="control"><span>SUB LEVEL</span><input id="sub-level" type="range" min="0" max="0.5" step="0.01" value="0"><output>0</output></label>
+          </div>
+        </section>
+        <section class="module mixer">
+          <div class="module-heading"><span>02 — MIXER</span><small>OSCILLATOR BALANCE</small></div>
+          <div id="mixer-controls"></div>
+          <label class="control vertical-control"><span>MASTER LEVEL</span><input id="master-level" type="range" min="0" max="1" step="0.01" value="0.72"><output>72</output></label>
+        </section>
+        <section class="module filter">
+          <div class="module-heading"><span>03 — FILTER</span><small>DUAL-STAGE MODEL</small></div>
+          <label class="control"><span>FILTER TYPE</span><select id="filter-type"><option value="lowpass">LOW PASS 24</option><option value="bandpass">BAND PASS</option><option value="highpass">HIGH PASS 24</option></select></label>
+          <div class="knob-grid">
+            <label class="control"><span>CUTOFF</span><input id="cutoff" type="range" min="80" max="14000" step="1" value="900"><output>900 Hz</output></label>
+            <label class="control"><span>RESONANCE</span><input id="resonance" type="range" min="0.1" max="18" step="0.1" value="0.8"><output>0.8</output></label>
+            <label class="control"><span>DRIVE</span><input id="drive" type="range" min="0" max="1" step="0.01" value="0"><output>0</output></label>
+            <label class="control"><span>KEY TRACK</span><input id="keytrack" type="range" min="0" max="1" step="0.01" value="0.25"><output>25%</output></label>
+          </div>
+        </section>
+        <section class="module envelopes">
+          <div class="module-heading"><span>04 — AMP ENVELOPE</span><small>ADSR GENERATOR</small></div>
+          <div class="knob-grid">
+            <label class="control"><span>ATTACK</span><input id="attack" type="range" min="0.005" max="4" step="0.005" value="0.02"><output>20 ms</output></label>
+            <label class="control"><span>DECAY</span><input id="decay" type="range" min="0.01" max="5" step="0.01" value="0.35"><output>350 ms</output></label>
+            <label class="control"><span>SUSTAIN</span><input id="sustain" type="range" min="0" max="1" step="0.01" value="0.72"><output>72%</output></label>
+            <label class="control"><span>RELEASE</span><input id="release" type="range" min="0.01" max="8" step="0.01" value="0.45"><output>450 ms</output></label>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="mod-panel" class="panel">
+      <div class="module-grid two-col">
+        <section class="module">
+          <div class="module-heading"><span>05 — LFO 1</span><small>CYCLIC MODULATION</small></div>
+          <label class="control"><span>WAVEFORM</span><select id="lfo-wave"><option value="sine">SINE</option><option value="triangle">TRIANGLE</option><option value="square">SQUARE</option><option value="sawtooth">SAW</option></select></label>
+          <div class="knob-grid">
+            <label class="control"><span>RATE</span><input id="lfo-rate" type="range" min="0.05" max="20" step="0.05" value="4"><output>4.00 Hz</output></label>
+            <label class="control"><span>DEPTH</span><input id="lfo-depth" type="range" min="0" max="100" step="1" value="0"><output>0%</output></label>
+          </div>
+          <label class="control"><span>DESTINATION</span><select id="lfo-destination"><option value="pitch">PITCH</option><option value="cutoff">FILTER CUTOFF</option><option value="pulse">PULSE WIDTH</option></select></label>
+        </section>
+        <section class="module">
+          <div class="module-heading"><span>06 — MOD MATRIX</span><small>ROUTING BAY</small></div>
+          <p class="module-note">The modulation architecture is being expanded. LFO 1 is live now; additional sources and assignable destinations will be added in the next engine pass.</p>
+          <div class="matrix-preview"><span>SOURCE</span><b>LFO 1</b><span>AMOUNT</span><b id="matrix-amount">0%</b><span>DESTINATION</span><b id="matrix-dest">PITCH</b></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="fx-panel" class="panel">
+      <div class="module-grid two-col">
+        <section class="module">
+          <div class="module-heading"><span>07 — EFFECTS</span><small>MASTER FX CHAIN</small></div>
+          <label class="toggle-row"><span>CHORUS</span><input id="chorus-on" type="checkbox"><b></b></label>
+          <label class="control"><span>CHORUS RATE</span><input id="chorus-rate" type="range" min="0.1" max="5" step="0.1" value="0.8"><output>0.8 Hz</output></label>
+          <label class="control"><span>CHORUS MIX</span><input id="chorus-mix" type="range" min="0" max="1" step="0.01" value="0.25"><output>25%</output></label>
+        </section>
+        <section class="module">
+          <div class="module-heading"><span>08 — SPACE</span><small>AMBIENCE</small></div>
+          <label class="toggle-row"><span>REVERB</span><input id="reverb-on" type="checkbox" checked><b></b></label>
+          <label class="control"><span>ROOM SIZE</span><input id="reverb-size" type="range" min="0.1" max="4" step="0.1" value="1.8"><output>1.8 s</output></label>
+          <label class="control"><span>WET LEVEL</span><input id="reverb-mix" type="range" min="0" max="1" step="0.01" value="0.18"><output>18%</output></label>
+        </section>
+      </div>
+    </section>
+
+    <section id="perform-panel" class="panel">
+      <div class="module-grid two-col">
+        <section class="module">
+          <div class="module-heading"><span>09 — PERFORMANCE</span><small>LIVE CONTROL</small></div>
+          <label class="control"><span>OCTAVE SHIFT</span><select id="octave"><option value="-2">-2 OCTAVES</option><option value="-1">-1 OCTAVE</option><option value="0" selected>0 / NORMAL</option><option value="1">+1 OCTAVE</option><option value="2">+2 OCTAVES</option></select></label>
+          <label class="control"><span>PORTAMENTO</span><input id="portamento" type="range" min="0" max="0.5" step="0.01" value="0"><output>OFF</output></label>
+          <label class="control"><span>MOD WHEEL</span><input id="mod-wheel" type="range" min="0" max="1" step="0.01" value="0"><output>0%</output></label>
+        </section>
+        <section class="module">
+          <div class="module-heading"><span>10 — PATCH MEMORY</span><small>LOCAL LIBRARY</small></div>
+          <p class="module-note">Save your own sounds in this browser. Your patch library stays on this device.</p>
+          <div id="patch-list" class="patch-list"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="keyboard-section">
+      <div class="keyboard-heading"><span>PERFORMANCE KEYBOARD</span><small>CLICK / TOUCH / COMPUTER KEYS (A–K)</small></div>
+      <div id="keyboard" class="keyboard" aria-label="Playable keyboard"></div>
+    </section>
+    <footer><span>X-4D5</span><span>DESIGNED BY S.E.N.S.E.</span><span>WEB AUDIO ENGINE · BUILD 0.1</span></footer>
+  </main>
+  <script src="synth.js"></script>
+</body>
+</html>
