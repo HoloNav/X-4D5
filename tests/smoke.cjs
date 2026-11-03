@@ -151,6 +151,31 @@ async function main(){
       assert.match(await page.locator('#seq-play').innerText(),/RUNNING/,'Arpeggiator started');
       await page.locator('#seq-stop').click({force:true});
       assert.match(await page.locator('#seq-position').innerText(),/STOPPED/);
+      // The user demonstrated voice saturation (18 ACTIVE) while switching
+      // factory patches during playback. Preset changes must now stop both
+      // sequencer and lingering release tails, with no ghost notes restarting.
+      await page.locator('#seq-mode').selectOption('step');
+      await page.locator('.key[data-note="60"]').click({force:true});
+      await page.evaluate(()=>{
+        const bpm=document.querySelector('#seq-tempo');
+        bpm.value='240';bpm.dispatchEvent(new Event('input',{bubbles:true}));
+      });
+      await page.locator('#seq-play').click({force:true});
+      await sleep(350);
+      assert.match(await page.locator('#seq-play').innerText(),/RUNNING/,'Sequencer is playing before patch change');
+      await page.locator('#next-preset').click({force:true});
+      assert.match(await page.locator('#seq-position').innerText(),/STOPPED/,
+        'Changing patches must stop the running sequencer');
+      await sleep(350);
+      assert.equal(Number((await page.locator('#voice-count').innerText()).match(/\d+/)[0]),0,
+        'Changing patches must clear all old release tails');
+      for(let cycle=0;cycle<18;cycle++)await page.locator('#next-preset').click({force:true});
+      await sleep(300);
+      assert.equal(Number((await page.locator('#voice-count').innerText()).match(/\d+/)[0]),0,
+        'Rapidly changing factory patches cannot accumulate voices');
+      assert.match(await page.locator('#seq-position').innerText(),/STOPPED/,
+        'Sequencer must not restart itself during patch cycling');
+      console.log(name,'PRESET_CYCLING_PASS',await page.locator('#patch-name').innerText());
       assert.deepEqual(errors,[],name+' no browser JS errors');
       console.log(name,'PASS',JSON.stringify({audioLinks:links.length,savedControls:Object.keys(p.controls).length,
         keyboard:25,oscillators:3}));
