@@ -129,7 +129,7 @@
   }
   function applyPreset(index){
     currentPreset=(index+presets.length)%presets.length;const p=presets[currentPreset];
-    $("patch-name").textContent=p.name;$("screen-meta").textContent="PATCH / A-"+String(currentPreset+1).padStart(3,"0");
+    $("patch-name").textContent=p.name;document.querySelector(".screen-meta span:first-child").textContent="PATCH / A-"+String(currentPreset+1).padStart(3,"0");
     p.wave.forEach((w,i)=>{oscSettings[i].wave=w;oscSettings[i].level=p.level[i];oscSettings[i].oct=p.oct[i];const row=$("oscillators").children[i];row.querySelectorAll("select")[0].value=w;row.querySelectorAll("select")[1].value=p.oct[i];const mix=$("mixer-controls").children[i];mix.querySelector("input").value=p.level[i];mix.querySelector("output").textContent=Math.round(p.level[i]*100)+"%";});
     ["cutoff","resonance","attack","decay","sustain","release"].forEach(id=>{$(id).value=p[id];$(id).dispatchEvent(new Event("input"));});
   }
