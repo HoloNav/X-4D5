@@ -31,42 +31,232 @@ window.addEventListener("unhandledrejection", event => {
     {name:"DEEP SPACE",wave:["sine","triangle","sawtooth"],level:[.62,.22,.1],oct:[-1,-2,0],cutoff:850,resonance:.6,attack:.18,decay:1.4,sustain:.85,release:2.1},
     {name:"METAL PULSE",wave:["square","sawtooth","square"],level:[.35,.3,.18],oct:[0,1,-1],cutoff:1750,resonance:2.6,attack:.003,decay:.19,sustain:.26,release:.1}
   ];
-  let audio = null, master = null, active = new Map(), currentPreset = 0, voices = 0;
-  let chorusDelay, chorusLfo, chorusWet, dryGain, reverbWet, reverbDry, convolver;
-  let seqTimer=null, seqStep=0, seqDirection=1, heldNotes=new Map(), arpLatchNotes=[], arpTapNotes=[];
-  let stepEnabled=Array(16).fill(true), stepOffsets=[0,2,4,7,9,7,4,2,0,-3,-5,-3,0,2,4,7];
-  const oscSettings = [0,1,2].map(i => ({wave:"sawtooth",level:[.55,.28,.2][i],oct:0}));
-  const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-  const keyMap = {a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:72};
+  let audio=null, master=null, currentPreset=0, voices=0;
+  const active=new Map(); // Only keys/tokens that are still held
+  const voicePool=new Set(); // Includes release tails and scheduled sequencer notes
+  let chorusDelay,chorusLfo,chorusWet,dryGain,reverbWet,convolver;
+  let noiseBuffer=null, lastMidi=60, seqTimer=null, seqStep=0,seqDirection=1;
+  let seqNextTime=0,seqEpoch=0,seqVisualTimers=new Set(),seqGateTimers=new Set();
+  let heldNotes=new Map(),arpLatchNotes=[],arpTapNotes=[];
+  let stepEnabled=Array(16).fill(true),stepOffsets=[0,2,4,7,9,7,4,2,0,-3,-5,-3,0,2,4,7];
+  const oscSettings=[0,1,2].map(i=>({wave:"sawtooth",level:[.55,.28,.2][i],oct:0}));
+  const noteNames=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const keyMap={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:72};
+  const driveCurves=new Map();
   function initAudio(){
-    if(audio) { if(audio.state==="suspended") audio.resume(); return; }
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if(!AC){ $("engine-state").textContent="AUDIO NOT SUPPORTED"; return; }
-    audio = new AC();
-    master = audio.createGain(); master.gain.value = Number($("master-level").value);
-    const limiter = audio.createDynamicsCompressor();
-    limiter.threshold.value=-8; limiter.knee.value=8; limiter.ratio.value=8; limiter.attack.value=.003; limiter.release.value=.18;
-    dryGain=audio.createGain(); dryGain.gain.value=.9;
-    chorusDelay=audio.createDelay(.05); chorusDelay.delayTime.value=.018;
-    chorusLfo=audio.createOscillator(); chorusLfo.frequency.value=.8;
-    const chorusDepth=audio.createGain(); chorusDepth.gain.value=.006;
-    chorusLfo.connect(chorusDepth); chorusDepth.connect(chorusDelay.delayTime); chorusLfo.start();
-    chorusWet=audio.createGain(); chorusWet.gain.value=0;
+    if(audio){
+      if(audio.state==="suspended")audio.resume().catch(err=>console.warn("Could not resume audio:",err));
+      return;
+    }
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC){$("engine-state").textContent="AUDIO NOT SUPPORTED";return;}
+    audio=new AC({latencyHint:"interactive"});
+    master=audio.createGain();master.gain.value=read("master-level");
+    const limiter=audio.createDynamicsCompressor();
+    limiter.threshold.value=-8;limiter.knee.value=8;limiter.ratio.value=8;
+    limiter.attack.value=.003;limiter.release.value=.18;
+    dryGain=audio.createGain();dryGain.gain.value=.9;
+    chorusDelay=audio.createDelay(.05);chorusDelay.delayTime.value=.018;
+    chorusLfo=audio.createOscillator();chorusLfo.frequency.value=read("chorus-rate");
+    const chorusDepth=audio.createGain();chorusDepth.gain.value=.006;
+    chorusLfo.connect(chorusDepth);chorusDepth.connect(chorusDelay.delayTime);chorusLfo.start();
+    chorusWet=audio.createGain();
+    chorusWet.gain.value=$("chorus-on").checked?read("chorus-mix"):0;
     chorusDelay.connect(chorusWet);
-    convolver=audio.createConvolver(); convolver.buffer=makeImpulse(1.8);
-    reverbWet=audio.createGain(); reverbWet.gain.value=.18;
-    reverbDry=audio.createGain(); reverbDry.gain.value=.82;
+    convolver=audio.createConvolver();convolver.buffer=makeImpulse(read("reverb-size"));
+    reverbWet=audio.createGain();
+    reverbWet.gain.value=$("reverb-on").checked?read("reverb-mix"):0;
     const fxSum=audio.createGain();
-    dryGain.connect(fxSum); chorusWet.connect(fxSum); reverbWet.connect(fxSum);
-    // Reverb receives the shared dry signal, then returns to the master bus.
-    dryGain.connect(convolver); convolver.connect(reverbWet);
-    fxSum.connect(limiter); limiter.connect(master); master.connect(audio.destination);
+    // Dry, chorus send, and reverb send all receive signal. The old chorus
+    // node had no input and could never produce a wet signal.
+    dryGain.connect(fxSum);
+    dryGain.connect(chorusDelay);chorusWet.connect(fxSum);
+    dryGain.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(fxSum);
+    fxSum.connect(limiter);limiter.connect(master);master.connect(audio.destination);
+    noiseBuffer=makeNoiseBuffer();
     $("engine-state").textContent="AUDIO ENGINE READY";
   }
   function makeImpulse(seconds){
-    const rate=audio.sampleRate, length=Math.floor(rate*seconds), buffer=audio.createBuffer(2,length,rate);
-    for(let c=0;c<2;c++){const data=buffer.getChannelData(c);for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/length,2.8);}
+    const rate=audio.sampleRate,length=Math.max(1,Math.floor(rate*clamp(seconds,.1,4)));
+    const buffer=audio.createBuffer(2,length,rate);
+    for(let c=0;c<2;c++){
+      const data=buffer.getChannelData(c);
+      for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/length,2.8);
+    }
     return buffer;
+  }
+  function makeNoiseBuffer(){
+    const b=audio.createBuffer(1,audio.sampleRate,audio.sampleRate),data=b.getChannelData(0);
+    for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+    return b; // shared between all voices, no per-note 1-second allocations
+  }
+  function makeDriveCurve(amount){
+    const key=Math.round(clamp(amount,0,1)*100);
+    if(driveCurves.has(key))return driveCurves.get(key);
+    const curve=new Float32Array(2048),intensity=1+key*.14,normal=Math.tanh(intensity);
+    for(let i=0;i<curve.length;i++){
+      const x=2*i/(curve.length-1)-1;
+      curve[i]=key===0?x:Math.tanh(intensity*x)/normal;
+    }
+    driveCurves.set(key,curve);
+    return curve;
+  }
+  function filterCutoff(note){
+    return clamp(read("cutoff")*Math.pow(2,(note-60)*read("keytrack")/12),
+      35,audio?audio.sampleRate*.45:18000);
+  }
+  function updateVoices(){
+    voices=voicePool.size;
+    $("voice-count").textContent=voices+" VOICES ACTIVE";
+  }
+  function setHeld(note,on){
+    const n=heldNotes.get(note)||0;
+    if(on)heldNotes.set(note,n+1);
+    else if(n<=1)heldNotes.delete(note);
+    else heldNotes.set(note,n-1);
+  }
+  function configureLfo(v){
+    if(!audio||!v||v.ended)return;
+    const t=audio.currentTime;
+    v.lfo.type=$("lfo-wave").value;
+    v.lfo.frequency.setTargetAtTime(read("lfo-rate"),t,.02);
+    v.lfoGain.disconnect();
+    const depth=clamp(read("lfo-depth")/100+read("mod-wheel")*.45,0,1);
+    const dest=$("lfo-destination").value;
+    if(dest==="pitch"){
+      v.lfoGain.gain.setTargetAtTime(depth*45,t,.02);
+      v.oscs.filter(x=>x.osc.detune).forEach(x=>v.lfoGain.connect(x.osc.detune));
+    }else if(dest==="cutoff"){
+      v.lfoGain.gain.setTargetAtTime(depth*1500,t,.02);
+      v.filters.forEach(x=>v.lfoGain.connect(x.frequency));
+    }else{
+      // AMP / TREMOLO rather than incorrectly claiming pulse-width modulation
+      v.lfoGain.gain.setTargetAtTime(depth*.45,t,.02);
+      v.lfoGain.connect(v.tremolo.gain);
+    }
+  }
+  function updateLiveVoices(){
+    if(!audio)return;
+    const t=audio.currentTime;
+    for(const v of voicePool){
+      if(v.ended)continue;
+      v.filters.forEach(f=>{
+        f.type=$("filter-type").value;
+        f.frequency.setTargetAtTime(filterCutoff(v.note),t,.012);
+        f.Q.setTargetAtTime(Math.max(.1,read("resonance")*.55),t,.012);
+      });
+      v.drive.curve=makeDriveCurve(read("drive"));
+      v.oscs.forEach((o,i)=>{
+        if(i>=3)return;
+        const setting=oscSettings[i];
+        o.osc.type=setting.wave;
+        o.osc.frequency.setTargetAtTime(midiHz(v.note+setting.oct*12),t,.015);
+        o.gain.gain.setTargetAtTime(setting.level,t,.012);
+      });
+      configureLfo(v);
+    }
+  }
+  function terminateVoice(v,atTime,fast=false){
+    if(!audio||!v||v.ended)return;
+    const t=Math.max(audio.currentTime,atTime??audio.currentTime);
+    const release=fast?.012:read("release");
+    const stopAt=Math.max(t,v.when||0)+release+.035;
+    if(v.cleanupTimer)clearTimeout(v.cleanupTimer);
+    const gain=v.amp.gain;
+    if(typeof gain.cancelAndHoldAtTime==="function")gain.cancelAndHoldAtTime(t);
+    else{
+      gain.cancelScheduledValues(t);
+      gain.setValueAtTime(Math.max(.0001,gain.value),t);
+    }
+    gain.setTargetAtTime(.00001,t,Math.max(.005,release/4));
+    v.oscs.forEach(o=>{try{o.osc.stop(stopAt)}catch(err){}});
+    try{v.lfo.stop(stopAt)}catch(err){}
+    v.released=true;
+    if(active.get(v.token)===v)active.delete(v.token);
+    v.cleanupTimer=setTimeout(()=>{
+      v.ended=true;
+      v.oscs.forEach(o=>{try{o.osc.disconnect();o.gain.disconnect()}catch(err){}});
+      try{v.lfo.disconnect();v.lfoGain.disconnect();v.input.disconnect();
+        v.drive.disconnect();v.tremolo.disconnect();v.amp.disconnect();
+        v.filters.forEach(f=>f.disconnect())}catch(err){}
+      voicePool.delete(v);updateVoices();
+    },Math.max(0,(stopAt-audio.currentTime)*1000)+45);
+    updateVoices();
+  }
+  function startNote(note,velocity=.82,token=note,when=null){
+    initAudio();
+    if(!audio||active.has(token))return;
+    // Count voices that are still in their release tails as real DSP voices.
+    if(voicePool.size>=18){
+      const oldest=voicePool.values().next().value;
+      terminateVoice(oldest,audio.currentTime,true);
+      // Immediately make a slot for the new voice: the old voice is fading
+      // out and its cleanup remains scheduled.
+      if(oldest)voicePool.delete(oldest);
+    }
+    const now=Math.max(audio.currentTime,when??audio.currentTime);
+    const input=audio.createGain(),drive=audio.createWaveShaper();
+    input.gain.value=.72;
+    drive.curve=makeDriveCurve(read("drive"));drive.oversample="2x";
+    const filters=[audio.createBiquadFilter(),audio.createBiquadFilter()];
+    filters.forEach(f=>{
+      f.type=$("filter-type").value;
+      f.frequency.setValueAtTime(filterCutoff(note),now);
+      f.Q.value=Math.max(.1,read("resonance")*.55);
+    });
+    const tremolo=audio.createGain();tremolo.gain.value=1;
+    const amp=audio.createGain();
+    input.connect(drive);drive.connect(filters[0]);filters[0].connect(filters[1]);
+    filters[1].connect(tremolo);tremolo.connect(amp);amp.connect(dryGain);
+    const oscs=[];
+    oscSettings.forEach((setting,i)=>{
+      const osc=audio.createOscillator(),gain=audio.createGain();
+      osc.type=setting.wave;
+      const target=midiHz(note+setting.oct*12);
+      const glide=read("portamento");
+      const initial=midiHz(lastMidi+setting.oct*12);
+      osc.frequency.setValueAtTime(glide>0?initial:target,now);
+      if(glide>0)osc.frequency.exponentialRampToValueAtTime(target,now+glide);
+      gain.gain.value=setting.level;
+      osc.connect(gain);gain.connect(input);osc.start(now);
+      oscs.push({osc,gain});
+    });
+    const noiseLevel=read("noise-level");
+    if(noiseLevel>0){
+      const n=audio.createBufferSource(),g=audio.createGain();n.buffer=noiseBuffer;
+      n.loop=true;g.gain.value=noiseLevel;n.connect(g);g.connect(input);n.start(now);
+      oscs.push({osc:n,gain:g});
+    }
+    const subLevel=read("sub-level");
+    if(subLevel>0){
+      const sub=audio.createOscillator(),g=audio.createGain();
+      sub.type="sine";sub.frequency.setValueAtTime(midiHz(note-12),now);
+      g.gain.value=subLevel;sub.connect(g);g.connect(input);sub.start(now);
+      oscs.push({osc:sub,gain:g});
+    }
+    const attack=read("attack"),decay=read("decay"),sustain=read("sustain");
+    amp.gain.setValueAtTime(.00001,now);
+    amp.gain.linearRampToValueAtTime(Math.max(.0001,velocity),now+attack);
+    amp.gain.linearRampToValueAtTime(Math.max(.0001,velocity*sustain),now+attack+decay);
+    const lfo=audio.createOscillator(),lfoGain=audio.createGain();
+    lfo.connect(lfoGain);
+    const v={token,note,when:now,amp,oscs,filters,drive,input,tremolo,lfo,lfoGain,
+      released:false,ended:false,cleanupTimer:null};
+    configureLfo(v);lfo.start(now);
+    active.set(token,v);voicePool.add(v);lastMidi=note;updateVoices();
+    return v;
+  }
+  function stopNote(token,when=null){
+    const v=active.get(token);
+    if(!v||!audio)return;
+    terminateVoice(v,when??audio.currentTime);
+  }
+  function stopAll(){
+    for(const v of [...voicePool])terminateVoice(v,audio?.currentTime,true);
+    active.clear();
+    heldNotes.clear();
+    pointerNotes.clear();
+    document.querySelectorAll(".key.active").forEach(x=>x.classList.remove("active"));
   }
   function read(id){return Number($(id).value);}
   function updateVoices(){ $("voice-count").textContent=voices+" VOICES ACTIVE"; }
