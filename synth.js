@@ -128,6 +128,7 @@
   }
   function stopSequence(){
     if(seqTimer){clearTimeout(seqTimer);seqTimer=null;}
+    if(!$("arp-latch").checked)arpTapNotes=[];
     for(const token of [...active.keys()])if(String(token).startsWith("seq-"))stopNote(token);
     document.querySelectorAll(".seq-step").forEach(b=>b.classList.remove("playing"));
     $("seq-position").textContent="STOPPED";
@@ -208,6 +209,7 @@
         e.preventDefault();
         if(pointerNotes.has(e.pointerId))return;
         pointerNotes.set(e.pointerId,note);
+        if(!arpTapNotes.includes(note))arpTapNotes.push(note);
         key.classList.add("active");
         heldNotes.set(note,true);
         startNote(note,.85,"ptr-"+e.pointerId);
