@@ -8,6 +8,24 @@
     {name:"DARK MATTER",wave:["sawtooth","sawtooth","square"],level:[.55,.4,.25],oct:[0,0,-1],cutoff:420,resonance:2.4,attack:.04,decay:.8,sustain:.8,release:.65},
     {name:"SUB ORBIT",wave:["sine","triangle","sawtooth"],level:[.75,.2,.12],oct:[-1,0,1],cutoff:1200,resonance:.7,attack:.005,decay:.2,sustain:.9,release:.22},
     {name:"NEON STRINGS",wave:["sawtooth","sawtooth","triangle"],level:[.3,.32,.2],oct:[0,0,1],cutoff:3400,resonance:1.1,attack:.65,decay:1.2,sustain:.68,release:2.8}
+    {name:"GLASS CURRENT",wave:["triangle","sine","sine"],level:[.3,.45,.18],oct:[0,1,2],cutoff:5200,resonance:.5,attack:.01,decay:1.8,sustain:.35,release:2.2},
+    {name:"DARK MATTER",wave:["sawtooth","sawtooth","square"],level:[.55,.4,.25],oct:[0,0,-1],cutoff:420,resonance:2.4,attack:.04,decay:.8,sustain:.8,release:.65},
+    {name:"SUB ORBIT",wave:["sine","triangle","sawtooth"],level:[.75,.2,.12],oct:[-1,0,1],cutoff:1200,resonance:.7,attack:.005,decay:.2,sustain:.9,release:.22},
+    {name:"NEON STRINGS",wave:["sawtooth","sawtooth","triangle"],level:[.3,.32,.2],oct:[0,0,1],cutoff:3400,resonance:1.1,attack:.65,decay:1.2,sustain:.68,release:2.8},
+    {name:"ACID BASS",wave:["sawtooth","square","sawtooth"],level:[.62,.28,.18],oct:[-1,-1,-2],cutoff:680,resonance:3.2,attack:.004,decay:.22,sustain:.18,release:.08},
+    {name:"RUMBLE SUB",wave:["sine","sine","triangle"],level:[.85,.35,.08],oct:[-2,-1,-2],cutoff:520,resonance:.7,attack:.008,decay:.3,sustain:.95,release:.12},
+    {name:"RIDDIM WUB",wave:["square","sawtooth","sine"],level:[.48,.42,.3],oct:[-1,-1,-2],cutoff:460,resonance:2.8,attack:.006,decay:.34,sustain:.42,release:.1},
+    {name:"REESE ENGINE",wave:["sawtooth","sawtooth","square"],level:[.42,.42,.2],oct:[-1,-1,-2],cutoff:1150,resonance:1.6,attack:.012,decay:.5,sustain:.72,release:.18},
+    {name:"FM KICK BASS",wave:["sine","square","sine"],level:[.8,.22,.22],oct:[-2,-1,-3],cutoff:780,resonance:1.1,attack:.002,decay:.16,sustain:.08,release:.09},
+    {name:"DUB PLUCK",wave:["triangle","square","sine"],level:[.5,.2,.18],oct:[-1,0,-2],cutoff:1450,resonance:1.8,attack:.003,decay:.24,sustain:.12,release:.16},
+    {name:"NEON LEAD",wave:["sawtooth","square","triangle"],level:[.42,.24,.18],oct:[0,1,0],cutoff:2600,resonance:1.5,attack:.015,decay:.28,sustain:.62,release:.22},
+    {name:"LASER PLUCK",wave:["square","triangle","sine"],level:[.4,.25,.22],oct:[1,0,2],cutoff:4100,resonance:2.2,attack:.002,decay:.16,sustain:.04,release:.12},
+    {name:"WARM ANALOG",wave:["sawtooth","triangle","sawtooth"],level:[.4,.32,.16],oct:[0,-1,1],cutoff:1850,resonance:.8,attack:.08,decay:.7,sustain:.7,release:.8},
+    {name:"COSMIC PAD",wave:["triangle","sawtooth","sine"],level:[.35,.2,.32],oct:[0,1,2],cutoff:2300,resonance:.6,attack:1.1,decay:1.8,sustain:.8,release:3.4},
+    {name:"CHOIR MACHINE",wave:["sine","triangle","sine"],level:[.45,.32,.22],oct:[0,1,-1],cutoff:3200,resonance:.5,attack:.7,decay:1.3,sustain:.76,release:2.5},
+    {name:"PLASMA STAB",wave:["sawtooth","square","triangle"],level:[.5,.32,.16],oct:[0,0,1],cutoff:3100,resonance:2.4,attack:.004,decay:.42,sustain:.2,release:.18},
+    {name:"DEEP SPACE",wave:["sine","triangle","sawtooth"],level:[.62,.22,.1],oct:[-1,-2,0],cutoff:850,resonance:.6,attack:.18,decay:1.4,sustain:.85,release:2.1},
+    {name:"METAL PULSE",wave:["square","sawtooth","square"],level:[.35,.3,.18],oct:[0,1,-1],cutoff:1750,resonance:2.6,attack:.003,decay:.19,sustain:.26,release:.1}
   ];
   let audio = null, master = null, active = new Map(), currentPreset = 0, voices = 0;
   let chorusDelay, chorusLfo, chorusWet, dryGain, reverbWet, reverbDry, convolver;
@@ -147,11 +165,11 @@
       startNote(note,.82,token);
       const beat=60/Number($("seq-tempo").value),swing=Number($("seq-swing").value)/100;
       const gate=Number($("seq-gate").value)/100;
-      const duration=beat*(step%2===0?1+swing:1-swing);
-      setTimeout(()=>stopNote(token),Math.max(30,duration*gate*1000));
+      const duration=beat*(step%2===0?1+swing:1-swing)*(mode==="arp"?.5:1);
+      setTimeout(()=>stopNote(token),Math.max(24,duration*gate*1000));
     }
     const beat=60/Number($("seq-tempo").value),swing=Number($("seq-swing").value)/100;
-    const duration=beat*(step%2===0?1+swing:1-swing);
+    const duration=beat*(step%2===0?1+swing:1-swing)*(mode==="arp"?.5:1);
     seqStep=(seqStep+1)%count;
     seqTimer=setTimeout(sequenceTick,duration*1000);
   }
@@ -208,8 +226,16 @@
       key.addEventListener("pointerdown",e=>{
         e.preventDefault();
         if(pointerNotes.has(e.pointerId))return;
+        if(arpTapNotes.includes(note)){
+          arpTapNotes=arpTapNotes.filter(n=>n!==note);
+          arpLatchNotes=arpLatchNotes.filter(n=>n!==note);
+          heldNotes.delete(note);
+          key.classList.remove("active");
+          if(!arpTapNotes.length&&!heldNotes.size)$("seq-position").textContent="TAP KEYS, THEN PLAY";
+          return;
+        }
         pointerNotes.set(e.pointerId,note);
-        if(!arpTapNotes.includes(note))arpTapNotes.push(note);
+        arpTapNotes.push(note);
         key.classList.add("active");
         heldNotes.set(note,true);
         startNote(note,.85,"ptr-"+e.pointerId);
