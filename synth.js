@@ -8,10 +8,6 @@
     {name:"DARK MATTER",wave:["sawtooth","sawtooth","square"],level:[.55,.4,.25],oct:[0,0,-1],cutoff:420,resonance:2.4,attack:.04,decay:.8,sustain:.8,release:.65},
     {name:"SUB ORBIT",wave:["sine","triangle","sawtooth"],level:[.75,.2,.12],oct:[-1,0,1],cutoff:1200,resonance:.7,attack:.005,decay:.2,sustain:.9,release:.22},
     {name:"NEON STRINGS",wave:["sawtooth","sawtooth","triangle"],level:[.3,.32,.2],oct:[0,0,1],cutoff:3400,resonance:1.1,attack:.65,decay:1.2,sustain:.68,release:2.8}
-    {name:"GLASS CURRENT",wave:["triangle","sine","sine"],level:[.3,.45,.18],oct:[0,1,2],cutoff:5200,resonance:.5,attack:.01,decay:1.8,sustain:.35,release:2.2},
-    {name:"DARK MATTER",wave:["sawtooth","sawtooth","square"],level:[.55,.4,.25],oct:[0,0,-1],cutoff:420,resonance:2.4,attack:.04,decay:.8,sustain:.8,release:.65},
-    {name:"SUB ORBIT",wave:["sine","triangle","sawtooth"],level:[.75,.2,.12],oct:[-1,0,1],cutoff:1200,resonance:.7,attack:.005,decay:.2,sustain:.9,release:.22},
-    {name:"NEON STRINGS",wave:["sawtooth","sawtooth","triangle"],level:[.3,.32,.2],oct:[0,0,1],cutoff:3400,resonance:1.1,attack:.65,decay:1.2,sustain:.68,release:2.8},
     {name:"ACID BASS",wave:["sawtooth","square","sawtooth"],level:[.62,.28,.18],oct:[-1,-1,-2],cutoff:680,resonance:3.2,attack:.004,decay:.22,sustain:.18,release:.08},
     {name:"RUMBLE SUB",wave:["sine","sine","triangle"],level:[.85,.35,.08],oct:[-2,-1,-2],cutoff:520,resonance:.7,attack:.008,decay:.3,sustain:.95,release:.12},
     {name:"RIDDIM WUB",wave:["square","sawtooth","sine"],level:[.48,.42,.3],oct:[-1,-1,-2],cutoff:460,resonance:2.8,attack:.006,decay:.34,sustain:.42,release:.1},
