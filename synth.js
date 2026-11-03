@@ -11,7 +11,7 @@
   ];
   let audio = null, master = null, active = new Map(), currentPreset = 0, voices = 0;
   let chorusDelay, chorusLfo, chorusWet, dryGain, reverbWet, reverbDry, convolver;
-  let seqTimer=null, seqStep=0, seqDirection=1, heldNotes=new Map(), arpLatchNotes=[];
+  let seqTimer=null, seqStep=0, seqDirection=1, heldNotes=new Map(), arpLatchNotes=[], arpTapNotes=[];
   let stepEnabled=Array(16).fill(true), stepOffsets=[0,2,4,7,9,7,4,2,0,-3,-5,-3,0,2,4,7];
   const oscSettings = [0,1,2].map(i => ({wave:"sawtooth",level:[.55,.28,.2][i],oct:0}));
   const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
@@ -101,10 +101,10 @@
   function sequenceNotes(){
     const mode=$("seq-mode").value;
     if(mode==="step"){
-      const root=heldNotes.size?[...heldNotes.keys()].sort((a,b)=>a-b)[0]:60;
+      const root=heldNotes.size?[...heldNotes.keys()].sort((a,b)=>a-b)[0]:(arpTapNotes.length?arpTapNotes[0]:60);
       return [root+stepOffsets[seqStep%16]];
     }
-    const notes=arpLatchNotes.length?arpLatchNotes:[...heldNotes.keys()].sort((a,b)=>a-b);
+    const notes=arpLatchNotes.length?arpLatchNotes:(heldNotes.size?[...heldNotes.keys()].sort((a,b)=>a-b):[...arpTapNotes].sort((a,b)=>a-b));
     if(!notes.length)return [];
     const expanded=[];const oct=Number($("arp-octaves").value);
     for(let o=0;o<oct;o++)notes.forEach(n=>expanded.push(n+o*12));
@@ -156,8 +156,8 @@
   }
   function startSequence(){
     if(seqTimer)return;
-    if($("seq-mode").value==="arp"&&!heldNotes.size&&!arpLatchNotes.length){$("seq-position").textContent="HOLD NOTES FIRST";return;}
-    if($("seq-mode").value==="step"&&!heldNotes.size){$("seq-position").textContent="HOLD A ROOT NOTE";return;}
+    if($("seq-mode").value==="arp"&&!heldNotes.size&&!arpLatchNotes.length&&!arpTapNotes.length){$("seq-position").textContent="TAP KEYS, THEN PLAY";return;}
+    if($("seq-mode").value==="step"&&!heldNotes.size&&!arpTapNotes.length){$("seq-position").textContent="TAP A ROOT NOTE FIRST";return;}
     seqStep=0;$("seq-play").textContent="Ⅱ RUNNING";seqTimer=true;sequenceTick();
   }
 
