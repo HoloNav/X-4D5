@@ -177,22 +177,47 @@
       mix.append(label);
     }
   }
+  const pointerNotes = new Map();
+  function releasePointer(pointerId){
+    const note=pointerNotes.get(pointerId);
+    if(note===undefined)return;
+    stopNote("ptr-"+pointerId);
+    pointerNotes.delete(pointerId);
+    heldNotes.delete(note);
+    const key=$('.key[data-note="'+note+'"]');
+    if(key)key.classList.remove("active");
+    if($("arp-latch").checked)arpLatchNotes=[...new Set([...arpLatchNotes,note])];
+  }
   function buildKeyboard(){
     const host=$("keyboard"),start=48,count=25,black=[1,3,6,8,10];
     for(let n=0;n<count;n++){
-      const note=start+n,pc=note%12,key=document.createElement("button");key.className="key"+(black.includes(pc)?" black":"");key.dataset.note=note;
-      key.textContent=pc===0?"C"+(Math.floor(note/12)-1):"";
-      if(black.includes(pc)){const whiteBefore=n-black.filter(b=>b<pc).length;key.style.left=(whiteBefore*100/15+100/30)+"%";}
-      else key.style.flex="1";
-      key.addEventListener("pointerdown",e=>{e.preventDefault();key.setPointerCapture(e.pointerId);key.classList.add("active");heldNotes.set(note,true);startNote(note,.85,"ptr-"+e.pointerId);});
-      const release=()=>{key.classList.remove("active");stopNote("ptr-"+lastPointer);};
-      let lastPointer;
-      key.addEventListener("pointerdown",e=>lastPointer=e.pointerId);
-      key.addEventListener("pointerup",e=>{key.classList.remove("active");stopNote("ptr-"+e.pointerId);heldNotes.delete(note);if($("arp-latch").checked)arpLatchNotes=[...new Set([...arpLatchNotes,note])];});
-      key.addEventListener("pointercancel",e=>{key.classList.remove("active");stopNote("ptr-"+e.pointerId);heldNotes.delete(note);});
+      const note=start+n,pc=note%12,octave=Math.floor(note/12)-1;
+      const key=document.createElement("button");
+      key.type="button";
+      key.className="key"+(black.includes(pc)?" black":"");
+      key.dataset.note=note;
+      const label=noteNames[pc]+octave;
+      key.textContent=label;
+      key.setAttribute("aria-label",label);
+      key.title=label;
+      if(black.includes(pc)){
+        const whiteBefore=n-black.filter(b=>b<pc).length;
+        key.style.left=(whiteBefore*100/15+100/30)+"%";
+      }else key.style.flex="1";
+      key.addEventListener("pointerdown",e=>{
+        e.preventDefault();
+        if(pointerNotes.has(e.pointerId))return;
+        pointerNotes.set(e.pointerId,note);
+        key.classList.add("active");
+        heldNotes.set(note,true);
+        startNote(note,.85,"ptr-"+e.pointerId);
+      });
       host.append(key);
     }
   }
+  window.addEventListener("pointerup",e=>releasePointer(e.pointerId));
+  window.addEventListener("pointercancel",e=>releasePointer(e.pointerId));
+
   function applyPreset(index){
     currentPreset=(index+presets.length)%presets.length;const p=presets[currentPreset];
     $("patch-name").textContent=p.name;document.querySelector(".screen-meta span:first-child").textContent="PATCH / A-"+String(currentPreset+1).padStart(3,"0");
