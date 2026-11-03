@@ -112,9 +112,10 @@ async function main(){
         'Reloading a user patch must not duplicate the library');
 
       // Both arp and step modes should run and respond to stop/PANIC.
-      // The sequencer needs a root note after dialogs/blur reset held notes.
-      await page.locator('.key[data-note="60"]').click({force:true});
+      // Select the mode first: changing modes deliberately clears the old
+      // chord, so the performer enters a new root in the chosen mode.
       await page.locator('#seq-mode').selectOption('step');
+      await page.locator('.key[data-note="60"]').click({force:true});
       assert.equal(await page.locator('#seq-steps .seq-step').count(),16);
       await page.locator('#seq-play').click({force:true});
       await sleep(350);
