@@ -125,6 +125,8 @@ async function main(){
       assert.match(await page.locator('#seq-play').innerText(),/PLAY/);
       await page.locator('#seq-mode').selectOption('arp');
       await page.locator('#arp-direction').selectOption('asplayed');
+      await page.locator('.key[data-note="60"]').click({force:true});
+      await page.locator('.key[data-note="64"]').click({force:true});
       await page.locator('#seq-play').click({force:true});
       await sleep(250);
       assert.match(await page.locator('#seq-play').innerText(),/RUNNING/,'Arpeggiator started');
