@@ -595,18 +595,74 @@ window.addEventListener("unhandledrejection", event => {
   bindRange("lfo-rate",v=>v.toFixed(2)+" Hz");bindRange("lfo-depth",v=>Math.round(v)+"%");
   bindRange("chorus-rate",v=>v.toFixed(1)+" Hz");bindRange("chorus-mix",v=>Math.round(v*100)+"%");bindRange("reverb-size",v=>v.toFixed(1)+" s");bindRange("reverb-mix",v=>Math.round(v*100)+"%");
   bindRange("portamento",v=>v===0?"OFF":v.toFixed(2)+" s");bindRange("mod-wheel",v=>Math.round(v*100)+"%");
-  $("filter-type").addEventListener("change",()=>{});$("chorus-on").addEventListener("change",()=>{if(chorusWet)chorusWet.gain.value=$("chorus-on").checked?read("chorus-mix"):0;});
-  $("reverb-on").addEventListener("change",()=>{if(reverbWet)reverbWet.gain.value=$("reverb-on").checked?read("reverb-mix"):0;});
-  $("lfo-destination").addEventListener("change",()=>{$("matrix-dest").textContent=$("lfo-destination").selectedOptions[0].text;});
-  $("panic").addEventListener("click",stopAll);$("prev-preset").addEventListener("click",()=>applyPreset(currentPreset-1));$("next-preset").addEventListener("click",()=>applyPreset(currentPreset+1));$("save-preset").addEventListener("click",savePatch);
-  document.querySelectorAll(".mode-tab").forEach(tab=>tab.addEventListener("click",()=>{document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active",t===tab));document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id===tab.dataset.target));}));
-  window.addEventListener("keydown",e=>{if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||e.target.matches("input,select,textarea"))return;const note=keyMap[e.key.toLowerCase()];if(note!==undefined){const shifted=note+Number($("octave").value)*12;heldNotes.set(shifted,true);startNote(shifted,.8,"kbd-"+e.key.toLowerCase());const key=$(' .key[data-note="'+shifted+'"]'.trim());if(key)key.classList.add("active");}});
-  window.addEventListener("keyup",e=>{const k="kbd-"+e.key.toLowerCase();stopNote(k);const held=keyMap[e.key.toLowerCase()];if(held!==undefined){const shifted=held+Number($("octave").value)*12;heldNotes.delete(shifted);if($("arp-latch").checked)arpLatchNotes=[...new Set([...arpLatchNotes,shifted])];}const note=keyMap[e.key.toLowerCase()];if(note!==undefined){const key=$('.key[data-note="'+(note+Number($("octave").value)*12)+'"]');if(key)key.classList.remove("active");}});
-  $("seq-mode").addEventListener("change",()=>{stopSequence();seqStep=0;renderSteps();});
-  $("seq-play").addEventListener("click",startSequence);$("seq-stop").addEventListener("click",stopSequence);
+  $("filter-type").addEventListener("change",updateLiveVoices);
+  $("chorus-on").addEventListener("change",()=>{
+    if(chorusWet&&audio)chorusWet.gain.setTargetAtTime(
+      $("chorus-on").checked?read("chorus-mix"):0,audio.currentTime,.02);
+  });
+  $("reverb-on").addEventListener("change",()=>{
+    if(reverbWet&&audio)reverbWet.gain.setTargetAtTime(
+      $("reverb-on").checked?read("reverb-mix"):0,audio.currentTime,.02);
+  });
+  $("lfo-wave").addEventListener("change",updateLiveVoices);
+  $("lfo-destination").addEventListener("change",()=>{
+    $("matrix-dest").textContent=$("lfo-destination").selectedOptions[0].text;
+    updateLiveVoices();
+  });
+  $("panic").addEventListener("click",()=>{stopSequence();stopAll();});
+  $("prev-preset").addEventListener("click",()=>applyPreset(currentPreset-1));
+  $("next-preset").addEventListener("click",()=>applyPreset(currentPreset+1));
+  $("save-preset").addEventListener("click",savePatch);
+  document.querySelectorAll(".mode-tab").forEach(tab=>tab.addEventListener("click",()=>{
+    document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active",t===tab));
+    document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id===tab.dataset.target));
+  }));
+  window.addEventListener("keydown",e=>{
+    if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||
+       e.target?.matches?.("input,select,textarea"))return;
+    const k=e.key.toLowerCase(),base=keyMap[k];
+    if(base===undefined||computerHeld.has(k))return;
+    e.preventDefault();
+    const note=base+Number($("octave").value)*12;
+    computerHeld.set(k,{note,base});
+    setHeld(note,true);
+    if(!arpTapNotes.includes(note))arpTapNotes.push(note);
+    startNote(note,.8,"kbd-"+k);
+    const key=$('.key[data-note="'+base+'"]');
+    if(key)key.classList.add("active");
+  });
+  window.addEventListener("keyup",e=>{
+    const k=e.key.toLowerCase(),info=computerHeld.get(k);
+    if(!info)return;
+    e.preventDefault();
+    computerHeld.delete(k);
+    stopNote("kbd-"+k);
+    setHeld(info.note,false);
+    if($("arp-latch").checked&&!arpLatchNotes.includes(info.note))
+      arpLatchNotes.push(info.note);
+    const key=$('.key[data-note="'+info.base+'"]');
+    if(key)key.classList.remove("active");
+  });
+  $("seq-mode").addEventListener("change",()=>{
+    stopSequence();seqStep=0;renderSteps();
+  });
+  $("seq-play").addEventListener("click",startSequence);
+  $("seq-stop").addEventListener("click",stopSequence);
   $("seq-all").addEventListener("click",()=>{stepEnabled.fill(true);renderSteps();});
-  $("seq-clear").addEventListener("click",()=>{stepEnabled.fill(false);arpLatchNotes=[];renderSteps();});
-  $("arp-latch").addEventListener("change",e=>{if(!e.target.checked)arpLatchNotes=[];else if(heldNotes.size)arpLatchNotes=[...heldNotes.keys()];});
-  bindRange("seq-tempo",v=>Math.round(v)+" BPM");bindRange("seq-gate",v=>Math.round(v)+"%");bindRange("seq-swing",v=>Math.round(v)+"%");
-  renderSteps();$("patch-name").textContent=presets[0].name;applyPreset(0);renderPatchList();
+  $("seq-clear").addEventListener("click",()=>{
+    stopSequence();stepEnabled.fill(false);
+    arpTapNotes=[];arpLatchNotes=[];
+    renderSteps();
+  });
+  $("arp-latch").addEventListener("change",e=>{
+    if(!e.target.checked)arpLatchNotes=[];
+    else arpLatchNotes=heldNotes.size?[...heldNotes.keys()]:[...arpTapNotes];
+  });
+  bindRange("seq-tempo",v=>Math.round(v)+" BPM");
+  bindRange("seq-gate",v=>Math.round(v)+"%");
+  bindRange("seq-swing",v=>Math.round(v)+"%");
+  renderSteps();
+  $("patch-name").textContent=presets[0].name;
+  applyPreset(0);
+  renderPatchList();
 })();
